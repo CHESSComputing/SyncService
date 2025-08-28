@@ -22,8 +22,8 @@ var metaDB docdb.DocDB
 // helper function to setup our router
 func setupRouter() *gin.Engine {
 	routes := []server.Route{
-		server.Route{Method: "GET", Path: "/", Handler: MainHandler, Authorized: false},
 		server.Route{Method: "GET", Path: "/request/*request", Handler: RequestHandler, Authorized: false},
+		server.Route{Method: "PUT", Path: "/request/*request", Handler: RequestHandler, Authorized: false},
 		server.Route{Method: "POST", Path: "/request", Handler: RequestHandler, Authorized: false},
 		server.Route{Method: "DELETE", Path: "/request/*request", Handler: RequestHandler, Authorized: false},
 	}
