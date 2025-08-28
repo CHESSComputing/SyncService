@@ -25,8 +25,9 @@ func setupRouter() *gin.Engine {
 		server.Route{Method: "GET", Path: "/", Handler: MainHandler, Authorized: false},
 		server.Route{Method: "GET", Path: "/request/*request", Handler: RequestHandler, Authorized: false},
 		server.Route{Method: "POST", Path: "/request", Handler: RequestHandler, Authorized: false},
+		server.Route{Method: "DELETE", Path: "/request/*request", Handler: RequestHandler, Authorized: false},
 	}
-	r := server.Router(routes, nil, "static", srvConfig.Config.DOI.WebServer)
+	r := server.Router(routes, nil, "static", srvConfig.Config.Sync.WebServer)
 	return r
 }
 
@@ -37,7 +38,7 @@ func Server() {
 	_httpReadRequest = services.NewHttpRequest("read", 0)
 
 	// init docdb
-	metaDB, err = docdb.InitializeDocDB(srvConfig.Config.CHESSMetaData.MongoDB.DBUri)
+	metaDB, err = docdb.InitializeDocDB(srvConfig.Config.Sync.MongoDB.DBUri)
 	if err != nil {
 		log.Fatal(err)
 	}

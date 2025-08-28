@@ -11,8 +11,8 @@ const (
 
 type RequestData struct {
 	UID        string `json:"uuid"`
-	SourceURI  string `json:"source_uri"`
-	TargetURI  string `json:"target_uri"`
+	SourceURL  string `json:"source_url"`
+	TargetURL  string `json:"target_url"`
 	Status     string `json:"status"`
 	StatusCode int    `json:"status_code"`
 }
