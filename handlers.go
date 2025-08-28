@@ -18,7 +18,7 @@ func MainHandler(c *gin.Context) {
 	rec := make(map[string]any)
 	if c.Request.Method == "GET" {
 		requestID := c.Param("request")
-		log.Println("### request id %s", requestID)
+		log.Printf("### request id %s", requestID)
 	} else if c.Request.Method == "POST" {
 		var payload RequestData
 		if err := c.ShouldBindJSON(&payload); err != nil {
