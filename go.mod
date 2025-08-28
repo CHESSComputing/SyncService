@@ -3,7 +3,7 @@ module github.com/CHESSComputing/SyncService
 go 1.25.0
 
 require (
-	github.com/CHESSComputing/golib v0.8.3
+	github.com/CHESSComputing/golib v0.8.4
 	github.com/gin-gonic/gin v1.10.1
 )
 
