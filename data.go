@@ -12,10 +12,12 @@ const (
 	UnsupportedMethod              // 102 unsupported method
 	InsertError                    // 103 insert error
 	Accepted                       // 104 request accepted
-	InProgress                     // 105 request in progress
-	SyncMetadata                   // 106 synching metadata
-	SyncProvenance                 // 107 synching provenance records
-	Completed                      // 108 request completed
+	Updated                        // 105 requested updated
+	Deleted                        // 106 request deleted
+	InProgress                     // 107 request in progress
+	SyncMetadata                   // 108 synching metadata
+	SyncProvenance                 // 109 synching provenance records
+	Completed                      // 110 request completed
 )
 
 // RequestData represents SyncService request data payload
