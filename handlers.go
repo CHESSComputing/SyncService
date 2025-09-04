@@ -19,15 +19,16 @@ import (
 // accept new request record (POST method)
 // delete given request (DELETE method)
 func RequestHandler(c *gin.Context) {
-	if c.Request.Method == "GET" {
+	switch c.Request.Method {
+	case "GET":
 		GetHandler(c)
-	} else if c.Request.Method == "DELETE" {
-		DeleteHandler(c)
-	} else if c.Request.Method == "PUT" {
-		PutHandler(c)
-	} else if c.Request.Method == "POST" {
+	case "POST":
 		PostHandler(c)
-	} else {
+	case "PUT":
+		PutHandler(c)
+	case "DELETE":
+		DeleteHandler(c)
+	default:
 		err := errors.New("unsupported HTTP method")
 		resp := services.Response("SyncService", http.StatusBadRequest, UnsupportedMethod, err)
 		c.JSON(http.StatusBadRequest, resp)
@@ -35,6 +36,7 @@ func RequestHandler(c *gin.Context) {
 	}
 }
 
+// GetHandler handles GET HTTP requests
 func GetHandler(c *gin.Context) {
 	resp := services.ServiceResponse{}
 	spec := make(map[string]any)
@@ -52,11 +54,11 @@ func GetHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// PostHandler handles POST HTTP requests
 func PostHandler(c *gin.Context) {
-	resp := services.ServiceResponse{}
 	var payload RequestData
 	if err := c.ShouldBindJSON(&payload); err != nil {
-		resp = services.Response("SyncService", http.StatusBadRequest, IncompleteRequest, err)
+		resp := services.Response("SyncService", http.StatusBadRequest, IncompleteRequest, err)
 		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
@@ -64,7 +66,7 @@ func PostHandler(c *gin.Context) {
 	if payload.SourceURL == "" || payload.TargetURL == "" ||
 		payload.SourceToken == "" || payload.TargetToken == "" {
 		err := errors.New("sync request does not provide all required attributes")
-		resp = services.Response("SyncService", http.StatusBadRequest, IncompleteRequest, err)
+		resp := services.Response("SyncService", http.StatusBadRequest, IncompleteRequest, err)
 		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
@@ -73,14 +75,15 @@ func PostHandler(c *gin.Context) {
 	requestRecord := payload.RequestRecord()
 	err := metaDB.InsertRecord(srvConfig.Config.Sync.MongoDB.DBName, "archive", requestRecord)
 	if err != nil {
-		resp = services.Response("SyncService", http.StatusBadRequest, InsertError, err)
+		resp := services.Response("SyncService", http.StatusBadRequest, InsertError, err)
 		c.JSON(http.StatusBadRequest, resp)
 		return
 	}
-	resp = services.Response("SyncService", http.StatusOK, Accepted, nil)
+	resp := services.Response("SyncService", http.StatusOK, Accepted, nil)
 	c.JSON(http.StatusOK, resp)
 }
 
+// PutHandler handles PUT HTTP requests
 func PutHandler(c *gin.Context) {
 	resp := services.ServiceResponse{}
 	spec := make(map[string]any)
@@ -92,6 +95,7 @@ func PutHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// DeleteHandler handles DELETE HTTP requests
 func DeleteHandler(c *gin.Context) {
 	resp := services.ServiceResponse{}
 	spec := make(map[string]any)
