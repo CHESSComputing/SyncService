@@ -40,8 +40,12 @@ func (p *RequestData) RequestRecord() map[string]any {
 	rec["target_url"] = p.TargetURL
 	rec["source_token"] = p.SourceToken
 	rec["target_token"] = p.TargetToken
-	uuid, _ := uuid.NewRandom()
-	rec["uuid"] = uuid
+	if p.UUID != "" {
+		rec["uuid"] = p.UUID
+	} else {
+		uuid, _ := uuid.NewRandom()
+		rec["uuid"] = uuid
+	}
 	rec["status"] = "sync request is accepted"
 	rec["status_code"] = Accepted
 	rec["created_at"] = time.Now().Format(time.RFC3339)
