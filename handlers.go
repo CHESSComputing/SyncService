@@ -21,13 +21,13 @@ import (
 func RequestHandler(c *gin.Context) {
 	switch c.Request.Method {
 	case "GET":
-		GetHandler(c)
+		getHandler(c)
 	case "POST":
-		PostHandler(c)
+		postHandler(c)
 	case "PUT":
-		PutHandler(c)
+		putHandler(c)
 	case "DELETE":
-		DeleteHandler(c)
+		deleteHandler(c)
 	default:
 		err := errors.New("unsupported HTTP method")
 		resp := services.Response("SyncService", http.StatusBadRequest, UnsupportedMethod, err)
@@ -36,8 +36,8 @@ func RequestHandler(c *gin.Context) {
 	}
 }
 
-// GetHandler handles GET HTTP requests
-func GetHandler(c *gin.Context) {
+// getHandler handles GET HTTP requests
+func getHandler(c *gin.Context) {
 	resp := services.ServiceResponse{}
 	spec := make(map[string]any)
 	requestID := c.Param("request")
@@ -54,8 +54,18 @@ func GetHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// PostHandler handles POST HTTP requests
-func PostHandler(c *gin.Context) {
+// postHandler handles POST HTTP requests
+func postHandler(c *gin.Context) {
+	syncHandler(c, "post")
+}
+
+// putHandler handles PUT HTTP requests
+func putHandler(c *gin.Context) {
+	syncHandler(c, "put")
+}
+
+// syncHandler handles POST/PUT HTTP requests
+func syncHandler(c *gin.Context, method string) {
 	var payload RequestData
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		resp := services.Response("SyncService", http.StatusBadRequest, IncompleteRequest, err)
@@ -73,7 +83,14 @@ func PostHandler(c *gin.Context) {
 
 	// insert request record into underlying sync database
 	requestRecord := payload.RequestRecord()
-	err := metaDB.InsertRecord(srvConfig.Config.Sync.MongoDB.DBName, "archive", requestRecord)
+	var err error
+	if method == "post" {
+		err = metaDB.InsertRecord(srvConfig.Config.Sync.MongoDB.DBName, "archive", requestRecord)
+	} else if method == "put" {
+		err = metaDB.InsertRecord(srvConfig.Config.Sync.MongoDB.DBName, "archive", requestRecord)
+	} else {
+		err = errors.New(fmt.Sprintf("unsupported method %s", method))
+	}
 	if err != nil {
 		resp := services.Response("SyncService", http.StatusBadRequest, InsertError, err)
 		c.JSON(http.StatusBadRequest, resp)
@@ -83,20 +100,8 @@ func PostHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// PutHandler handles PUT HTTP requests
-func PutHandler(c *gin.Context) {
-	resp := services.ServiceResponse{}
-	spec := make(map[string]any)
-	requestID := c.Param("request")
-	spec["UUID"] = requestID
-	resp.ServiceQuery.Query = fmt.Sprintf("/request/%s", requestID)
-	// TODO: implement logic to update request in internal DB
-	resp = services.Response("SyncService", http.StatusOK, Updated, nil)
-	c.JSON(http.StatusOK, resp)
-}
-
-// DeleteHandler handles DELETE HTTP requests
-func DeleteHandler(c *gin.Context) {
+// deleteHandler handles DELETE HTTP requests
+func deleteHandler(c *gin.Context) {
 	resp := services.ServiceResponse{}
 	spec := make(map[string]any)
 	requestID := c.Param("request")
