@@ -83,12 +83,21 @@ func syncHandler(c *gin.Context, method string) {
 
 	// insert request record into underlying sync database
 	requestRecord := payload.RequestRecord()
+	dbName := srvConfig.Config.Sync.MongoDB.DBName
+	dbColl := srvConfig.Config.Sync.MongoDB.DBColl
 	var err error
-	if method == "post" {
-		err = metaDB.InsertRecord(srvConfig.Config.Sync.MongoDB.DBName, "archive", requestRecord)
-	} else if method == "put" {
-		err = metaDB.InsertRecord(srvConfig.Config.Sync.MongoDB.DBName, "archive", requestRecord)
-	} else {
+	switch method {
+	case "POST":
+		err = metaDB.InsertRecord(dbName, dbColl, requestRecord)
+	case "PUT":
+		spec := make(map[string]any)
+		if uuid := payload.UUID; uuid != "" {
+			spec["UUID"] = uuid
+			err = metaDB.Update(dbName, dbColl, spec, requestRecord)
+		} else {
+			err = errors.New(fmt.Sprintf("update request %+v does not provide UUID", payload))
+		}
+	default:
 		err = errors.New(fmt.Sprintf("unsupported method %s", method))
 	}
 	if err != nil {
