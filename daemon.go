@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -51,7 +50,7 @@ func syncWorker(syncRecord map[string]any) error {
 	if val, ok := syncRecord["uuid"]; ok {
 		suuid = fmt.Sprintf("%s", val)
 	} else {
-		return errors.New(fmt.Sprintf("Unable to obtain UUID of sync record %+v", syncRecord))
+		return fmt.Errorf("Unable to obtain UUID of sync record %+v", syncRecord)
 	}
 	if err := updateMetadataRecords(syncRecord); err != nil {
 		return err
@@ -82,31 +81,32 @@ func syncWorker(syncRecord map[string]any) error {
 	return nil
 }
 
+// helper function to update provenance records
 func updateProvenanceRecords(syncRecord map[string]any) error {
-	// obtain all FOXDEN provenance records from source FOXDEN instance
-	// send PUT request to target FOXDEN instance with all provenance records
-	if surl, ok := syncRecord["source_url"]; ok {
-		spec := make(map[string]any)
-		rurl := fmt.Sprintf("%s/provenance", surl)
-		rec := services.ServiceRequest{
-			Client:       "foxden-sync",
-			ServiceQuery: services.ServiceQuery{Spec: spec},
-		}
-		data, err := json.Marshal(rec)
+	return updateRecords("provenance", syncRecord)
+}
+
+// helper function to update metadata records
+func updateMetadataRecords(syncRecord map[string]any) error {
+	return updateRecords("metadata", syncRecord)
+}
+
+// helper function to update records in FOXDEN
+func updateRecords(srv string, syncRecord map[string]any) error {
+	var records []map[string]any
+	var err error
+	// obtain all FOXDEN records from source FOXDEN instance
+	if val, ok := syncRecord["source_url"]; ok {
+		surl := fmt.Sprintf("%s", val)
+		records, err = getRecords(srv, surl)
 		if err != nil {
 			return err
 		}
-		resp, err := _httpReadRequest.Post(rurl, "application/json", bytes.NewBuffer(data))
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		data, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		var records []map[string]any
-		err = json.Unmarshal(data, &records)
+	}
+	// send PUT request to target FOXDEN isntance with all metadata records
+	if val, ok := syncRecord["target_url"]; ok {
+		turl := fmt.Sprintf("%s", val)
+		err := pushRecords(srv, turl, records)
 		if err != nil {
 			return err
 		}
@@ -114,35 +114,40 @@ func updateProvenanceRecords(syncRecord map[string]any) error {
 	return nil
 }
 
-func updateMetadataRecords(syncRecord map[string]any) error {
-	// obtain all FOXDEN metadata records from source FOXDEN instance
-	if surl, ok := syncRecord["source_url"]; ok {
-		spec := make(map[string]any)
-		rurl := fmt.Sprintf("%s/search", surl)
-		rec := services.ServiceRequest{
-			Client:       "foxden-sync",
-			ServiceQuery: services.ServiceQuery{Spec: spec},
-		}
-		data, err := json.Marshal(rec)
-		if err != nil {
-			return err
-		}
-		resp, err := _httpReadRequest.Post(rurl, "application/json", bytes.NewBuffer(data))
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		data, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		var records []map[string]any
-		err = json.Unmarshal(data, &records)
-		if err != nil {
-			return err
-		}
-	}
-	// send PUT request to target FOXDEN isntance with all metadata records
-	// update sync record with SyncMetadata status code
+// helper function to push FOXDEN records to upstream target url
+func pushRecords(srv, turl string, records []map[string]any) error {
+	log.Println(srv, turl, records)
 	return nil
+}
+
+// helper function to get records from given FOXDEN instance
+func getRecords(srv, surl string) ([]map[string]any, error) {
+	var records []map[string]any
+	spec := make(map[string]any)
+	rurl := fmt.Sprintf("%s/search", surl)
+	if srv == "provenance" {
+		rurl = fmt.Sprintf("%s/provenance", surl)
+	}
+	rec := services.ServiceRequest{
+		Client:       "foxden-sync",
+		ServiceQuery: services.ServiceQuery{Spec: spec},
+	}
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return records, err
+	}
+	resp, err := _httpReadRequest.Post(rurl, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		return records, err
+	}
+	defer resp.Body.Close()
+	data, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return records, err
+	}
+	err = json.Unmarshal(data, &records)
+	if err != nil {
+		return records, err
+	}
+	return records, nil
 }
