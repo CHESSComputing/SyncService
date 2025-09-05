@@ -14,28 +14,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RequestHandler provides access to /request end-point
-// return all specific request record (GET method) from /request/<request>
-// accept new request record (POST method)
-// delete given request (DELETE method)
-func RequestHandler(c *gin.Context) {
-	switch c.Request.Method {
-	case "GET":
-		getHandler(c)
-	case "POST":
-		postHandler(c)
-	case "PUT":
-		putHandler(c)
-	case "DELETE":
-		deleteHandler(c)
-	default:
-		err := errors.New("unsupported HTTP method")
-		resp := services.Response("SyncService", http.StatusBadRequest, UnsupportedMethod, err)
-		c.JSON(http.StatusBadRequest, resp)
-		return
-	}
-}
-
 // getHandler handles GET HTTP requests
 func getHandler(c *gin.Context) {
 	resp := services.ServiceResponse{}
@@ -56,12 +34,12 @@ func getHandler(c *gin.Context) {
 
 // postHandler handles POST HTTP requests
 func postHandler(c *gin.Context) {
-	syncHandler(c, "post")
+	syncHandler(c, "POST")
 }
 
 // putHandler handles PUT HTTP requests
 func putHandler(c *gin.Context) {
-	syncHandler(c, "put")
+	syncHandler(c, "PUT")
 }
 
 // syncHandler handles POST/PUT HTTP requests
