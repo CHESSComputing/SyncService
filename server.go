@@ -23,6 +23,7 @@ var Verbose int
 // helper function to setup our router
 func setupRouter() *gin.Engine {
 	routes := []server.Route{
+		{Method: "GET", Path: "/records", Handler: recordsHandler, Authorized: false},
 		{Method: "GET", Path: "/request/*request", Handler: getHandler, Authorized: false},
 		{Method: "PUT", Path: "/request/*request", Handler: putHandler, Authorized: false},
 		{Method: "POST", Path: "/request", Handler: postHandler, Authorized: false},

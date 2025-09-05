@@ -32,6 +32,16 @@ func getHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// recordsHandler handles requests to get set of records for provided meta parametes
+func recordsHandler(c *gin.Context) {
+	spec := make(map[string]any)
+	records := metaDB.Get(
+		srvConfig.Config.Sync.DBName,
+		srvConfig.Config.Sync.DBColl,
+		spec, 0, -1)
+	c.JSON(http.StatusOK, records)
+}
+
 // postHandler handles POST HTTP requests
 func postHandler(c *gin.Context) {
 	syncHandler(c, "POST")
