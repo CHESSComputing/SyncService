@@ -37,6 +37,7 @@ func Server() {
 	var err error
 	// initialize http request
 	_httpReadRequest = services.NewHttpRequest("read", 0)
+	_httpWriteRequest = services.NewHttpRequest("write", 0)
 
 	// init docdb
 	metaDB, err = docdb.InitializeDocDB(srvConfig.Config.Sync.MongoDB.DBUri)
