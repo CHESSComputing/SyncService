@@ -120,7 +120,7 @@ func updateRecords(srv string, syncRecord map[string]any) error {
 			urls = append(urls, rurl)
 		}
 		// now we'll get either metadata or provenance records
-		records = getFoxdenRecords(urls)
+		records = getRecordsForUrls(urls)
 	}
 	// send PUT request to target FOXDEN isntance with all metadata records
 	if val, ok := syncRecord["target_url"]; ok {
@@ -134,8 +134,16 @@ func updateRecords(srv string, syncRecord map[string]any) error {
 }
 
 // helper function to get records for given set of urls
-func getFoxdenRecords(urls []string) []map[string]any {
+func getRecordsForUrls(urls []string) []map[string]any {
 	var records []map[string]any
+	// TODO: I should optimize it through concurrency pool but so far we will fetch
+	// records sequentially
+	for _, rurl := range urls {
+		recs, err := getRecords(rurl)
+		if err == nil {
+			records = append(records, recs...)
+		}
+	}
 	return records
 }
 
