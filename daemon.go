@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -35,7 +34,7 @@ func syncDaemon(sleep int) {
 			break
 		}
 		// otherwise we'll sleep for provided duration
-		time.Sleep(time.Duration(sleep))
+		time.Sleep(time.Duration(sleep * int(time.Second)))
 	}
 }
 
@@ -105,22 +104,27 @@ func updateRecords(srv string, syncRecord map[string]any) error {
 	if val, ok := syncRecord["source_url"]; ok {
 		surl := fmt.Sprintf("%s", val)
 		rurl := fmt.Sprintf("%s/dids", surl)
-		didRecords, err := getRecords(rurl)
+		var token string
+		if val, ok := syncRecord["source_token"]; ok {
+			token = fmt.Sprintf("%s", val)
+		}
+		didRecords, err := getRecords(rurl, token)
 		if err != nil {
+			log.Printf("ERROR: unable to get records from url=%s token=%s error=%v", rurl, token, err)
 			return err
 		}
 		var dids, urls []string
 		for _, rec := range didRecords {
 			did := fmt.Sprintf("%s", rec["did"])
 			dids = append(dids, did)
-			rurl = fmt.Sprintf("%s/record?did=%s", did)
+			rurl = fmt.Sprintf("%s/record?did=%s", surl, did)
 			if srv == "provenance" {
 				rurl = fmt.Sprintf("%s/provenance?did=%s", did)
 			}
 			urls = append(urls, rurl)
 		}
 		// now we'll get either metadata or provenance records
-		records = getRecordsForUrls(urls)
+		records = getRecordsForUrls(urls, token)
 	}
 	// send PUT request to target FOXDEN isntance with all metadata records
 	if val, ok := syncRecord["target_url"]; ok {
@@ -134,14 +138,16 @@ func updateRecords(srv string, syncRecord map[string]any) error {
 }
 
 // helper function to get records for given set of urls
-func getRecordsForUrls(urls []string) []map[string]any {
+func getRecordsForUrls(urls []string, token string) []map[string]any {
 	var records []map[string]any
 	// TODO: I should optimize it through concurrency pool but so far we will fetch
 	// records sequentially
 	for _, rurl := range urls {
-		recs, err := getRecords(rurl)
+		recs, err := getRecords(rurl, token)
 		if err == nil {
 			records = append(records, recs...)
+		} else {
+			log.Println("ERROR: unable to get records for url", rurl, err)
 		}
 	}
 	return records
@@ -154,28 +160,25 @@ func pushRecords(srv, turl string, records []map[string]any) error {
 }
 
 // helper function to get records from given FOXDEN instance
-func getRecords(rurl string) ([]map[string]any, error) {
+func getRecords(rurl, token string) ([]map[string]any, error) {
 	var records []map[string]any
-	spec := make(map[string]any)
-	rec := services.ServiceRequest{
-		Client:       "foxden-sync",
-		ServiceQuery: services.ServiceQuery{Spec: spec},
-	}
-	data, err := json.Marshal(rec)
-	if err != nil {
-		return records, err
-	}
-	resp, err := _httpReadRequest.Post(rurl, "application/json", bytes.NewBuffer(data))
+	_httpReadRequest.Token = token
+	resp, err := _httpReadRequest.Get(rurl)
 	if err != nil {
 		return records, err
 	}
 	defer resp.Body.Close()
-	data, err = io.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return records, err
 	}
 	err = json.Unmarshal(data, &records)
 	if err != nil {
+		// try out service response record
+		var srec services.ServiceResponse
+		if err = json.Unmarshal(data, &srec); err == nil {
+			return srec.Results.Records, nil
+		}
 		return records, err
 	}
 	return records, nil
