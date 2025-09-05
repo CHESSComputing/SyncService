@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +24,8 @@ func syncDaemon(sleep int) {
 	idx := 0
 	limit := 0
 	spec := make(map[string]any)
+	// initially we sleep for couple of seconds to allow other services to wake up
+	time.Sleep(time.Duration(2 * int(time.Second)))
 	for {
 		records := metaDB.Get(dbname, dbcoll, spec, idx, limit)
 		var wg sync.WaitGroup
@@ -144,7 +147,7 @@ func updateRecords(srv string, syncRecord map[string]any) error {
 	if err != nil {
 		return err
 	}
-	targetDIDs, err := getDIDs(targetUrl, sourceToken)
+	targetDIDs, err := getDIDs(targetUrl, targetToken)
 	if err != nil {
 		return err
 	}
@@ -154,6 +157,9 @@ func updateRecords(srv string, syncRecord map[string]any) error {
 		if !utils.InList[string](did, targetDIDs) {
 			dids = append(dids, did)
 		}
+	}
+	if Verbose > 0 {
+		log.Printf("Source dids=%d, target dids=%d, sync dids=%d", len(sourceDIDs), len(targetDIDs), len(dids))
 	}
 
 	// construct urls from source url and dids to fetch either metadata or provenance records
@@ -172,7 +178,7 @@ func updateRecords(srv string, syncRecord map[string]any) error {
 	}
 
 	// push records to target FOXDEN instance
-	err = pushRecords(turl, targetToken, records)
+	err = pushRecords(srv, turl, targetToken, records)
 	return err
 }
 
@@ -217,15 +223,39 @@ func getRecords(rurl, token string) ([]map[string]any, error) {
 	return records, nil
 }
 
+type MetaRecord struct {
+	Schema string
+	Record map[string]any
+}
+
 // helper function to get records from given FOXDEN instance
 func pushRecord(rurl, token string, rec map[string]any) error {
-	_httpWriteRequest.Token = token
-	data, err := json.Marshal(rec)
+	var data []byte
+	var err error
+	if strings.Contains(rurl, "provenance") {
+		// we submit provenance record
+		data, err = json.Marshal(rec)
+	} else {
+		// we submit MetaRecord
+		mrec := MetaRecord{Record: rec}
+		if val, ok := rec["schema"]; ok {
+			mrec.Schema = fmt.Sprintf("%s", val)
+		} else {
+			msg := fmt.Sprintf("non complaint FOXDEN metadata record %+v", rec)
+			return errors.New(msg)
+		}
+		data, err = json.Marshal(mrec)
+	}
+	if Verbose > 0 {
+		log.Println("pushRecord", rurl, token, rec)
+	}
 	if err != nil {
 		return err
 	}
-	resp, err := _httpWriteRequest.Put(rurl, "application/json", bytes.NewBuffer(data))
+	_httpWriteRequest.Token = token
+	resp, err := _httpWriteRequest.Post(rurl, "application/json", bytes.NewBuffer(data))
 	if err != nil {
+		log.Printf("ERROR: unable to push record to target FOXDEN URL %s, error %v", rurl, err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -233,27 +263,27 @@ func pushRecord(rurl, token string, rec map[string]any) error {
 	if err != nil {
 		return err
 	}
-	var responseRecord services.ServiceResponse
-	err = json.Unmarshal(data, &responseRecord)
-	if err != nil {
-		return err
-	}
-	if responseRecord.HttpCode != 200 {
-		msg := responseRecord.Error
-		return errors.New(msg)
+	if resp.StatusCode != 200 {
+		log.Printf("ERROR: reponse from target FOXDEN %+v", resp.Status)
+		return errors.New(resp.Status)
 	}
 	return nil
 }
 
 // helper function to push FOXDEN records to upstream target url
-func pushRecords(turl, token string, records []map[string]any) error {
+func pushRecords(srv, turl, token string, records []map[string]any) error {
+	rurl := fmt.Sprintf("%s/record", turl)
+	if srv == "provenance" {
+		rurl = fmt.Sprintf("%s/record", turl)
+	}
 	if Verbose > 0 {
-		log.Printf("Push %d records to target FOXDEN instance %s", len(records), turl)
+		log.Printf("Push %d records to target FOXDEN instance %s", len(records), rurl)
 	}
 	// TODO: optimize push request via concurrency pool
 	for _, rec := range records {
-		err := pushRecord(turl, token, rec)
+		err := pushRecord(rurl, token, rec)
 		if err != nil {
+			log.Printf("ERROR: unable to push record to target URL %s, error=%v", turl, err)
 			return err
 		}
 	}
