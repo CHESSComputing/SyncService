@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -10,6 +12,7 @@ import (
 
 	srvConfig "github.com/CHESSComputing/golib/config"
 	"github.com/CHESSComputing/golib/services"
+	"github.com/CHESSComputing/golib/utils"
 )
 
 // syncDaemon function provide async functionality of
@@ -99,45 +102,78 @@ func updateMetadataRecords(syncRecord map[string]any) error {
 	return updateRecords("metadata", syncRecord)
 }
 
+// helper function to get dids for given FOXDEN url and access token
+func getDIDs(rurl, token string) ([]string, error) {
+	var dids []string
+	var err error
+	didRecords, err := getRecords(rurl, token)
+	if err != nil {
+		log.Printf("ERROR: unable to get records from url=%s token=%s error=%v", rurl, token, err)
+		return dids, err
+	}
+	for _, rec := range didRecords {
+		did := fmt.Sprintf("%s", rec["did"])
+		dids = append(dids, did)
+	}
+	return dids, nil
+}
+
 // helper function to update records in FOXDEN
 func updateRecords(srv string, syncRecord map[string]any) error {
 	var records []map[string]any
 	var err error
-	// obtain all FOXDEN records from source FOXDEN instance
+	var surl, sourceUrl, turl, targetUrl string
 	if val, ok := syncRecord["source_url"]; ok {
-		surl := fmt.Sprintf("%s", val)
-		rurl := fmt.Sprintf("%s/dids", surl)
-		var token string
-		if val, ok := syncRecord["source_token"]; ok {
-			token = fmt.Sprintf("%s", val)
-		}
-		didRecords, err := getRecords(rurl, token)
-		if err != nil {
-			log.Printf("ERROR: unable to get records from url=%s token=%s error=%v", rurl, token, err)
-			return err
-		}
-		var dids, urls []string
-		for _, rec := range didRecords {
-			did := fmt.Sprintf("%s", rec["did"])
-			dids = append(dids, did)
-			rurl = fmt.Sprintf("%s/record?did=%s", surl, did)
-			if srv == "provenance" {
-				rurl = fmt.Sprintf("%s/provenance?did=%s", did)
-			}
-			urls = append(urls, rurl)
-		}
-		// now we'll get either metadata or provenance records
-		records = getRecordsForUrls(urls, token)
+		surl = fmt.Sprintf("%s", val)
+		sourceUrl = fmt.Sprintf("%s/dids", surl)
 	}
-	// send PUT request to target FOXDEN isntance with all metadata records
 	if val, ok := syncRecord["target_url"]; ok {
-		turl := fmt.Sprintf("%s", val)
-		err = pushRecords(srv, turl, records)
-		if err != nil {
-			return err
+		turl = fmt.Sprintf("%s", val)
+		targetUrl = fmt.Sprintf("%s/dids", turl)
+	}
+	var sourceToken, targetToken string
+	if val, ok := syncRecord["source_token"]; ok {
+		sourceToken = fmt.Sprintf("%s", val)
+	}
+	if val, ok := syncRecord["target_token"]; ok {
+		targetToken = fmt.Sprintf("%s", val)
+	}
+
+	// obtain all FOXDEN records from source FOXDEN instance
+	sourceDIDs, err := getDIDs(sourceUrl, sourceToken)
+	if err != nil {
+		return err
+	}
+	targetDIDs, err := getDIDs(targetUrl, sourceToken)
+	if err != nil {
+		return err
+	}
+	// construct unique list of dids to fetch from source FOXDEN instance
+	var dids []string
+	for _, did := range sourceDIDs {
+		if !utils.InList[string](did, targetDIDs) {
+			dids = append(dids, did)
 		}
 	}
-	return nil
+
+	// construct urls from source url and dids to fetch either metadata or provenance records
+	var urls []string
+	for _, did := range dids {
+		rurl := fmt.Sprintf("%s/record?did=%s", surl, did)
+		if srv == "provenance" {
+			rurl = fmt.Sprintf("%s/provenance?did=%s", did)
+		}
+		urls = append(urls, rurl)
+	}
+	// now we'll get either metadata or provenance records
+	records = getRecordsForUrls(urls, sourceToken)
+	if Verbose > 0 {
+		log.Printf("Fetched %d records from source FOXDEN instance %s", len(records), surl)
+	}
+
+	// push records to target FOXDEN instance
+	err = pushRecords(turl, targetToken, records)
+	return err
 }
 
 // helper function to get records for given set of urls
@@ -154,12 +190,6 @@ func getRecordsForUrls(urls []string, token string) []map[string]any {
 		}
 	}
 	return records
-}
-
-// helper function to push FOXDEN records to upstream target url
-func pushRecords(srv, turl string, records []map[string]any) error {
-	log.Println(srv, turl, records)
-	return nil
 }
 
 // helper function to get records from given FOXDEN instance
@@ -185,4 +215,47 @@ func getRecords(rurl, token string) ([]map[string]any, error) {
 		return records, err
 	}
 	return records, nil
+}
+
+// helper function to get records from given FOXDEN instance
+func pushRecord(rurl, token string, rec map[string]any) error {
+	_httpWriteRequest.Token = token
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	resp, err := _httpWriteRequest.Put(rurl, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	data, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	var responseRecord services.ServiceResponse
+	err = json.Unmarshal(data, &responseRecord)
+	if err != nil {
+		return err
+	}
+	if responseRecord.HttpCode != 200 {
+		msg := responseRecord.Error
+		return errors.New(msg)
+	}
+	return nil
+}
+
+// helper function to push FOXDEN records to upstream target url
+func pushRecords(turl, token string, records []map[string]any) error {
+	if Verbose > 0 {
+		log.Printf("Push %d records to target FOXDEN instance %s", len(records), turl)
+	}
+	// TODO: optimize push request via concurrency pool
+	for _, rec := range records {
+		err := pushRecord(turl, token, rec)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
