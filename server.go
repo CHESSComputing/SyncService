@@ -22,10 +22,10 @@ var metaDB docdb.DocDB
 // helper function to setup our router
 func setupRouter() *gin.Engine {
 	routes := []server.Route{
-		server.Route{Method: "GET", Path: "/request/*request", Handler: RequestHandler, Authorized: false},
-		server.Route{Method: "PUT", Path: "/request/*request", Handler: RequestHandler, Authorized: false},
-		server.Route{Method: "POST", Path: "/request", Handler: RequestHandler, Authorized: false},
-		server.Route{Method: "DELETE", Path: "/request/*request", Handler: RequestHandler, Authorized: false},
+		{Method: "GET", Path: "/request/*request", Handler: RequestHandler, Authorized: false},
+		{Method: "PUT", Path: "/request/*request", Handler: RequestHandler, Authorized: false},
+		{Method: "POST", Path: "/request", Handler: RequestHandler, Authorized: false},
+		{Method: "DELETE", Path: "/request/*request", Handler: RequestHandler, Authorized: false},
 	}
 	r := server.Router(routes, nil, "static", srvConfig.Config.Sync.WebServer)
 	return r
