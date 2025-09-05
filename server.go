@@ -43,7 +43,7 @@ func Server() {
 		log.Fatal(err)
 	}
 
-	go syncDaemon()
+	go syncDaemon(srvConfig.Config.Sync.SleepInterval)
 
 	// setup web router and start the service
 	r := setupRouter()
