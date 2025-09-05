@@ -167,7 +167,7 @@ func updateRecords(srv string, syncRecord map[string]any) error {
 	for _, did := range dids {
 		rurl := fmt.Sprintf("%s/record?did=%s", surl, did)
 		if srv == "provenance" {
-			rurl = fmt.Sprintf("%s/provenance?did=%s", did)
+			rurl = fmt.Sprintf("%s/provenance?did=%s", surl, did)
 		}
 		urls = append(urls, rurl)
 	}
