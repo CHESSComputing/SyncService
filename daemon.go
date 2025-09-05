@@ -15,7 +15,7 @@ import (
 
 // syncDaemon function provide async functionality of
 // FOXDEN sync process
-func syncDaemon() {
+func syncDaemon(sleep int) {
 	dbname := srvConfig.Config.Sync.MongoDB.DBName
 	dbcoll := srvConfig.Config.Sync.MongoDB.DBColl
 	idx := 0
@@ -30,6 +30,12 @@ func syncDaemon() {
 			syncWorker(rec)
 		}
 		wg.Wait()
+		// if sleep interval is negative we quite the daemon cycle
+		if sleep < 0 {
+			break
+		}
+		// otherwise we'll sleep for provided duration
+		time.Sleep(time.Duration(sleep))
 	}
 }
 
@@ -98,20 +104,39 @@ func updateRecords(srv string, syncRecord map[string]any) error {
 	// obtain all FOXDEN records from source FOXDEN instance
 	if val, ok := syncRecord["source_url"]; ok {
 		surl := fmt.Sprintf("%s", val)
-		records, err = getRecords(srv, surl)
+		rurl := fmt.Sprintf("%s/dids", surl)
+		didRecords, err := getRecords(rurl)
 		if err != nil {
 			return err
 		}
+		var dids, urls []string
+		for _, rec := range didRecords {
+			did := fmt.Sprintf("%s", rec["did"])
+			dids = append(dids, did)
+			rurl = fmt.Sprintf("%s/record?did=%s", did)
+			if srv == "provenance" {
+				rurl = fmt.Sprintf("%s/provenance?did=%s", did)
+			}
+			urls = append(urls, rurl)
+		}
+		// now we'll get either metadata or provenance records
+		records = getFoxdenRecords(urls)
 	}
 	// send PUT request to target FOXDEN isntance with all metadata records
 	if val, ok := syncRecord["target_url"]; ok {
 		turl := fmt.Sprintf("%s", val)
-		err := pushRecords(srv, turl, records)
+		err = pushRecords(srv, turl, records)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// helper function to get records for given set of urls
+func getFoxdenRecords(urls []string) []map[string]any {
+	var records []map[string]any
+	return records
 }
 
 // helper function to push FOXDEN records to upstream target url
@@ -121,13 +146,9 @@ func pushRecords(srv, turl string, records []map[string]any) error {
 }
 
 // helper function to get records from given FOXDEN instance
-func getRecords(srv, surl string) ([]map[string]any, error) {
+func getRecords(rurl string) ([]map[string]any, error) {
 	var records []map[string]any
 	spec := make(map[string]any)
-	rurl := fmt.Sprintf("%s/search", surl)
-	if srv == "provenance" {
-		rurl = fmt.Sprintf("%s/provenance", surl)
-	}
 	rec := services.ServiceRequest{
 		Client:       "foxden-sync",
 		ServiceQuery: services.ServiceQuery{Spec: spec},
