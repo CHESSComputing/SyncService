@@ -66,9 +66,11 @@ func syncWorker(syncRecord map[string]any) error {
 	spec["uuid"] = suuid
 
 	// update sync record
-	spec["status_code"] = SyncMetadata
-	spec["updated_at"] = time.Now().Format(time.RFC3339)
-	if err := metaDB.Update(dbname, dbcoll, spec, syncRecord); err != nil {
+	syncRecord["status_code"] = SyncMetadata
+	syncRecord["updated_at"] = time.Now().Format(time.RFC3339)
+	newRecord := make(map[string]any)
+	newRecord["$set"] = syncRecord
+	if err := metaDB.Update(dbname, dbcoll, spec, newRecord); err != nil {
 		return err
 	}
 
@@ -77,9 +79,10 @@ func syncWorker(syncRecord map[string]any) error {
 		return err
 	}
 	// update sync record
-	spec["status_code"] = SyncProvenance
-	spec["updated_at"] = time.Now().Format(time.RFC3339)
-	if err := metaDB.Update(dbname, dbcoll, spec, syncRecord); err != nil {
+	syncRecord["status_code"] = SyncProvenance
+	syncRecord["updated_at"] = time.Now().Format(time.RFC3339)
+	newRecord["$set"] = syncRecord
+	if err := metaDB.Update(dbname, dbcoll, spec, newRecord); err != nil {
 		return err
 	}
 
