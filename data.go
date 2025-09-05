@@ -44,7 +44,7 @@ func (p *RequestData) RequestRecord() map[string]any {
 		rec["uuid"] = p.UUID
 	} else {
 		uuid, _ := uuid.NewRandom()
-		rec["uuid"] = uuid
+		rec["uuid"] = uuid.String()
 	}
 	rec["status"] = "sync request is accepted"
 	rec["status_code"] = Accepted
