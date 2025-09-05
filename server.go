@@ -16,8 +16,9 @@ import (
 
 // global variables
 var _header, _footer string
-var _httpReadRequest *services.HttpRequest
+var _httpReadRequest, _httpWriteRequest *services.HttpRequest
 var metaDB docdb.DocDB
+var Verbose int
 
 // helper function to setup our router
 func setupRouter() *gin.Engine {
@@ -48,5 +49,6 @@ func Server() {
 	// setup web router and start the service
 	r := setupRouter()
 	webServer := srvConfig.Config.Sync.WebServer
+	Verbose = srvConfig.Config.Sync.WebServer.Verbose
 	server.StartServer(r, webServer)
 }
