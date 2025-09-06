@@ -31,7 +31,9 @@ func syncDaemon(sleep int) {
 		var wg sync.WaitGroup
 		for _, rec := range records {
 			wg.Add(1)
-			log.Printf("processing %+v", rec)
+			if Verbose > 1 {
+				log.Printf("processing %+v", rec)
+			}
 			syncWorker(rec)
 		}
 		wg.Wait()
@@ -55,44 +57,76 @@ func syncDaemon(sleep int) {
 // - perform verification step
 // - update sync status code with Completed or Aborted
 func syncWorker(syncRecord map[string]any) error {
-	dbname := srvConfig.Config.Sync.MongoDB.DBName
-	dbcoll := srvConfig.Config.Sync.MongoDB.DBColl
+
+	// extract sync record uuid from sync record
 	var suuid string
 	if val, ok := syncRecord["uuid"]; ok {
 		suuid = fmt.Sprintf("%s", val)
 	} else {
 		return fmt.Errorf("Unable to obtain UUID of sync record %+v", syncRecord)
 	}
+
+	// update metadata records
+	if err := updateSyncRecordStatus(suuid, "in progress", InProgress); err != nil {
+		return err
+	}
 	if err := updateMetadataRecords(syncRecord); err != nil {
 		return err
 	}
-
-	// prepare sync query record
-	spec := make(map[string]any)
-	spec["uuid"] = suuid
-
-	// update sync record
-	syncRecord["status_code"] = SyncMetadata
-	syncRecord["updated_at"] = time.Now().Format(time.RFC3339)
-	newRecord := make(map[string]any)
-	newRecord["$set"] = syncRecord
-	if err := metaDB.Update(dbname, dbcoll, spec, newRecord); err != nil {
+	if err := updateSyncRecordStatus(suuid, "metadata records are synched", SyncMetadata); err != nil {
 		return err
 	}
 
 	// update provenance records
+	if err := updateSyncRecordStatus(suuid, "in progress", InProgress); err != nil {
+		return err
+	}
 	if err := updateProvenanceRecords(syncRecord); err != nil {
 		return err
 	}
-	// update sync record
-	syncRecord["status_code"] = SyncProvenance
-	syncRecord["updated_at"] = time.Now().Format(time.RFC3339)
-	newRecord["$set"] = syncRecord
-	if err := metaDB.Update(dbname, dbcoll, spec, newRecord); err != nil {
+	if err := updateSyncRecordStatus(suuid, "provenance records are synched", SyncProvenance); err != nil {
 		return err
 	}
 
+	// final update
+	if err := updateSyncRecordStatus(suuid, "sync is completed", Completed); err != nil {
+		return err
+	}
 	return nil
+}
+
+// helper function to update sync record status
+func updateSyncRecordStatus(suuid, status string, statusCode int) error {
+	dbname := srvConfig.Config.Sync.MongoDB.DBName
+	dbcoll := srvConfig.Config.Sync.MongoDB.DBColl
+	spec := make(map[string]any)
+	spec["uuid"] = suuid
+	rec := make(map[string]any)
+	newRecord := make(map[string]any)
+	// update sync record
+	rec["status_code"] = statusCode
+	rec["status"] = status
+	rec["updated_at"] = time.Now().Format(time.RFC3339)
+	newRecord["$set"] = rec
+	if err := metaDB.Update(dbname, dbcoll, spec, newRecord); err != nil {
+		return err
+	}
+	printSyncRecordStatus(suuid)
+	return nil
+}
+
+// helper function to print record status
+func printSyncRecordStatus(suuid string) {
+	dbname := srvConfig.Config.Sync.MongoDB.DBName
+	dbcoll := srvConfig.Config.Sync.MongoDB.DBColl
+	spec := make(map[string]any)
+	spec["uuid"] = suuid
+	records := metaDB.Get(dbname, dbcoll, spec, 0, 1)
+	for _, rec := range records {
+		if status, ok := rec["status"]; ok {
+			log.Printf("INFO: sync record %s status %s", suuid, status)
+		}
+	}
 }
 
 // helper function to update provenance records
@@ -296,7 +330,7 @@ func pushRecord(rurl, token string, rec map[string]any) error {
 		}
 		data, err = json.Marshal(mrec)
 	}
-	if Verbose > 0 {
+	if Verbose > 1 {
 		log.Println("pushRecord", rurl, token, rec)
 	}
 	if err != nil {
