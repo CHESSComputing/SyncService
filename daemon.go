@@ -162,17 +162,13 @@ func updateRecords(srv string, syncRecord map[string]any) error {
 		log.Printf("Source dids=%d, target dids=%d, sync dids=%d", len(sourceDIDs), len(targetDIDs), len(dids))
 	}
 
-	// construct urls from source url and dids to fetch either metadata or provenance records
-	var urls []string
-	for _, did := range dids {
-		rurl := fmt.Sprintf("%s/record?did=%s", surl, did)
-		if srv == "provenance" {
-			rurl = fmt.Sprintf("%s/provenance?did=%s", surl, did)
-		}
-		urls = append(urls, rurl)
-	}
 	// now we'll get either metadata or provenance records
-	records = getRecordsForUrls(urls, sourceToken)
+	if srvConfig.Config.Sync.NWorkers != 0 {
+		nWorkers := srvConfig.Config.Sync.NWorkers
+		records = getDidRecordsConcurrent(srv, surl, dids, sourceToken, nWorkers)
+	} else {
+		records = getDidRecords(srv, surl, dids, sourceToken)
+	}
 	if Verbose > 0 {
 		log.Printf("Fetched %d records from source FOXDEN instance %s", len(records), surl)
 	}
@@ -182,12 +178,21 @@ func updateRecords(srv string, syncRecord map[string]any) error {
 	return err
 }
 
+// helper function to get proper FOXDEN url for given service, url and did
+func getFoxdenUrl(srv, surl, did string) string {
+	rurl := fmt.Sprintf("%s/record?did=%s", surl, did)
+	if srv == "provenance" {
+		rurl = fmt.Sprintf("%s/provenance?did=%s", surl, did)
+	}
+	return rurl
+}
+
 // helper function to get records for given set of urls
-func getRecordsForUrls(urls []string, token string) []map[string]any {
+func getDidRecords(srv, surl string, dids []string, token string) []map[string]any {
 	var records []map[string]any
-	// TODO: I should optimize it through concurrency pool but so far we will fetch
-	// records sequentially
-	for _, rurl := range urls {
+	// fetch records sequentially
+	for _, did := range dids {
+		rurl := getFoxdenUrl(srv, surl, did)
 		recs, err := getRecords(rurl, token)
 		if err == nil {
 			records = append(records, recs...)
@@ -198,8 +203,48 @@ func getRecordsForUrls(urls []string, token string) []map[string]any {
 	return records
 }
 
+// concurrent version of getDidRecords with worker pool
+func getDidRecordsConcurrent(srv, surl string, dids []string, token string, maxWorkers int) []map[string]any {
+	var (
+		records []map[string]any
+		mu      sync.Mutex
+		wg      sync.WaitGroup
+		sem     = make(chan struct{}, maxWorkers) // semaphore channel
+	)
+
+	for _, did := range dids {
+		rurl := getFoxdenUrl(srv, surl, did)
+		wg.Add(1)
+
+		// acquire slot
+		sem <- struct{}{}
+
+		go func(u string) {
+			defer wg.Done()
+			defer func() { <-sem }() // release slot
+
+			recs, err := getRecords(u, token)
+			if err != nil {
+				log.Println("ERROR: unable to get records for url", u, err)
+				return
+			}
+
+			// safely append results
+			mu.Lock()
+			records = append(records, recs...)
+			mu.Unlock()
+		}(rurl)
+	}
+
+	// wait for all workers
+	wg.Wait()
+
+	return records
+}
+
 // helper function to get records from given FOXDEN instance
 func getRecords(rurl, token string) ([]map[string]any, error) {
+	log.Printf("INFO: get records for %s", rurl)
 	var records []map[string]any
 	_httpReadRequest.Token = token
 	resp, err := _httpReadRequest.Get(rurl)
@@ -230,6 +275,11 @@ type MetaRecord struct {
 
 // helper function to get records from given FOXDEN instance
 func pushRecord(rurl, token string, rec map[string]any) error {
+	if did, ok := rec["did"]; ok {
+		log.Printf("INFO: push record did=%s to %s", did, rurl)
+	} else {
+		log.Printf("INFO: push record to %s", rurl)
+	}
 	var data []byte
 	var err error
 	if strings.Contains(rurl, "provenance") {
