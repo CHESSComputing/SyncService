@@ -23,11 +23,11 @@ var Verbose int
 // helper function to setup our router
 func setupRouter() *gin.Engine {
 	routes := []server.Route{
-		{Method: "GET", Path: "/records", Handler: recordsHandler, Authorized: false},
-		{Method: "GET", Path: "/request/*request", Handler: getHandler, Authorized: false},
-		{Method: "PUT", Path: "/request/*request", Handler: putHandler, Authorized: false},
-		{Method: "POST", Path: "/request", Handler: postHandler, Authorized: false},
-		{Method: "DELETE", Path: "/request/*request", Handler: deleteHandler, Authorized: false},
+		{Method: "GET", Path: "/records", Handler: recordsHandler, Authorized: true, Scope: "read"},
+		{Method: "GET", Path: "/request/*request", Handler: getHandler, Authorized: true, Scope: "read"},
+		{Method: "PUT", Path: "/request/*request", Handler: putHandler, Authorized: true, Scope: "write"},
+		{Method: "POST", Path: "/request", Handler: postHandler, Authorized: true, Scope: "write"},
+		{Method: "DELETE", Path: "/request/*request", Handler: deleteHandler, Authorized: true, Scope: "delete"},
 	}
 	r := server.Router(routes, nil, "static", srvConfig.Config.Sync.WebServer)
 	return r
