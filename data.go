@@ -22,15 +22,17 @@ const (
 
 // RequestData represents SyncService request data payload
 type RequestData struct {
-	UUID        string `json:"uuid"`
-	SourceURL   string `json:"source_url"`
-	SourceToken string `json:"source_token"`
-	TargetURL   string `json:"target_url"`
-	TargetToken string `json:"target_token"`
-	Status      string `json:"status"`
-	StatusCode  int    `json:"status_code"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
+	UUID        string   `json:"uuid"`
+	did         string   `json:"did",omitempty`
+	SourceURL   string   `json:"source_url"`
+	SourceToken string   `json:"source_token"`
+	TargetURL   string   `json:"target_url"`
+	TargetToken string   `json:"target_token"`
+	Status      string   `json:"status"`
+	StatusCode  int      `json:"status_code"`
+	CreatedAt   string   `json:"created_at"`
+	UpdatedAt   string   `json:"updated_at"`
+	Btrs        []string `json:"btrs",omitempty`
 }
 
 // RequestRecord creates new request record for database out of payload
