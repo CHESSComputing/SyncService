@@ -16,20 +16,13 @@ import (
 
 // getHandler handles GET HTTP requests
 func getHandler(c *gin.Context) {
-	resp := services.ServiceResponse{}
 	spec := make(map[string]any)
-	requestID := c.Param("request")
-	resp.ServiceQuery.Query = fmt.Sprintf("/request/%s", requestID)
-	spec["UUID"] = requestID
+	spec["uuid"] = c.Param("uuid")
 	records := metaDB.Get(
 		srvConfig.Config.Sync.MongoDB.DBName,
 		srvConfig.Config.Sync.MongoDB.DBColl,
 		spec, 0, 1)
-	// TODO: implement logic to fetch request from internal DB
-	resp.ServiceQuery.Query = fmt.Sprintf("/request/%s", requestID)
-	resp.Results.Records = records
-	resp = services.Response("SyncService", http.StatusOK, Accepted, nil)
-	c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, records)
 }
 
 // recordsHandler handles requests to get set of records for provided meta parametes
@@ -80,7 +73,7 @@ func syncHandler(c *gin.Context, method string) {
 	case "PUT":
 		spec := make(map[string]any)
 		if uuid := payload.UUID; uuid != "" {
-			spec["UUID"] = uuid
+			spec["uuid"] = uuid
 			err = metaDB.Update(dbName, dbColl, spec, requestRecord)
 		} else {
 			err = errors.New(fmt.Sprintf("update request %+v does not provide UUID", payload))
@@ -99,12 +92,15 @@ func syncHandler(c *gin.Context, method string) {
 
 // deleteHandler handles DELETE HTTP requests
 func deleteHandler(c *gin.Context) {
-	resp := services.ServiceResponse{}
 	spec := make(map[string]any)
-	requestID := c.Param("request")
-	spec["UUID"] = requestID
-	resp.ServiceQuery.Query = fmt.Sprintf("/request/%s", requestID)
-	// TODO: implement logic to delete request from internal DB
-	resp = services.Response("SyncService", http.StatusOK, Deleted, nil)
-	c.JSON(http.StatusOK, resp)
+	spec["uuid"] = c.Param("uuid")
+	err := metaDB.Remove(
+		srvConfig.Config.Sync.DBName,
+		srvConfig.Config.Sync.DBColl,
+		spec)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, err)
+		return
+	}
+	c.JSON(http.StatusOK, nil)
 }
