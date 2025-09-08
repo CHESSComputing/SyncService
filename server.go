@@ -16,9 +16,14 @@ import (
 
 // global variables
 var _header, _footer string
-var _httpReadRequest, _httpWriteRequest *services.HttpRequest
 var metaDB docdb.DocDB
 var Verbose int
+
+// in production code
+var (
+	_httpReadRequest  services.HTTPClient = services.NewHttpRequest("read", 0)
+	_httpWriteRequest services.HTTPClient = services.NewHttpRequest("write", 0)
+)
 
 // helper function to setup our router
 func setupRouter() *gin.Engine {
@@ -36,9 +41,6 @@ func setupRouter() *gin.Engine {
 // Server defines our HTTP server
 func Server() {
 	var err error
-	// initialize http request
-	_httpReadRequest = services.NewHttpRequest("read", 0)
-	_httpWriteRequest = services.NewHttpRequest("write", 0)
 
 	// init docdb
 	metaDB, err = docdb.InitializeDocDB(srvConfig.Config.Sync.MongoDB.DBUri)

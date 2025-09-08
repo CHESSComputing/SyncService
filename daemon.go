@@ -280,7 +280,7 @@ func getDidRecordsConcurrent(srv, surl string, dids []string, token string, maxW
 func getRecords(rurl, token string) ([]map[string]any, error) {
 	log.Printf("INFO: get records for %s", rurl)
 	var records []map[string]any
-	_httpReadRequest.Token = token
+	_httpReadRequest.SetToken(token)
 	resp, err := _httpReadRequest.Get(rurl)
 	if err != nil {
 		return records, err
@@ -336,7 +336,7 @@ func pushRecord(rurl, token string, rec map[string]any) error {
 	if err != nil {
 		return err
 	}
-	_httpWriteRequest.Token = token
+	_httpWriteRequest.SetToken(token)
 	resp, err := _httpWriteRequest.Post(rurl, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		log.Printf("ERROR: unable to push record to target FOXDEN URL %s, error %v", rurl, err)
