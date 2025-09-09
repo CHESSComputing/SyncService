@@ -92,8 +92,10 @@ func syncWorker(syncRecord map[string]any) error {
 	if err := updateSyncRecordStatus(suuid, "in progress", InProgress); err != nil {
 		return err
 	}
-	if err := updateMetadataRecords(syncResources); err != nil {
-		return err
+	failedRecords := updateMetadataRecords(syncResources)
+	if len(failedRecords) != 0 {
+		msg := fmt.Sprintf("Failed to sync all metadata records, # of failed records %d", len(failedRecords))
+		return errors.New(msg)
 	}
 	if err := updateSyncRecordStatus(suuid, "metadata records are synched", SyncMetadata); err != nil {
 		return err
@@ -103,9 +105,10 @@ func syncWorker(syncRecord map[string]any) error {
 	if err := updateSyncRecordStatus(suuid, "in progress", InProgress); err != nil {
 		return err
 	}
-	if err := updateProvenanceRecords(syncResources); err != nil {
-		log.Println("ERROR: unable to update provenance record", err)
-		//return err
+	failedRecords = updateProvenanceRecords(syncResources)
+	if len(failedRecords) != 0 {
+		msg := fmt.Sprintf("Failed to sync all provenance records, # of failed records %d", len(failedRecords))
+		return errors.New(msg)
 	}
 	if err := updateSyncRecordStatus(suuid, "provenance records are synched", SyncProvenance); err != nil {
 		return err
@@ -153,13 +156,21 @@ func printSyncRecordStatus(suuid string) {
 }
 
 // helper function to update provenance records
-func updateProvenanceRecords(syncResources SyncResources) error {
-	return updateRecords("provenance", syncResources)
+func updateProvenanceRecords(syncResources SyncResources) []FailedRecord {
+	failedRecords := updateRecords("provenance", syncResources)
+	for _, r := range failedRecords {
+		log.Printf("ERROR: failed provenance record %+v", r)
+	}
+	return failedRecords
 }
 
 // helper function to update metadata records
-func updateMetadataRecords(syncResources SyncResources) error {
-	return updateRecords("metadata", syncResources)
+func updateMetadataRecords(syncResources SyncResources) []FailedRecord {
+	failedRecords := updateRecords("metadata", syncResources)
+	for _, r := range failedRecords {
+		log.Printf("ERROR: failed provenance record %+v", r)
+	}
+	return failedRecords
 }
 
 // helper function to get dids for given FOXDEN url and access token
@@ -224,9 +235,8 @@ func getResources(syncRecord map[string]any) (SyncResources, error) {
 }
 
 // helper function to update records in FOXDEN
-func updateRecords(srv string, syncResources SyncResources) error {
+func updateRecords(srv string, syncResources SyncResources) []FailedRecord {
 	var records []map[string]any
-	var err error
 	// now we'll get either metadata or provenance records
 	if srvConfig.Config.Sync.NWorkers != 0 {
 		nWorkers := srvConfig.Config.Sync.NWorkers
@@ -239,16 +249,14 @@ func updateRecords(srv string, syncResources SyncResources) error {
 	}
 
 	// push records to target FOXDEN instance
-	err = pushRecords(srv, syncResources.TargetUrl, syncResources.TargetToken, records)
-	/*
-		if srvConfig.Config.Sync.NWorkers != 0 {
-			nWorkers := srvConfig.Config.Sync.NWorkers
-			err = pushRecordsConcurrent(srv, syncResources.TargetUrl, syncResources.TargetToken, records, nWorkers)
-		} else {
-			err = pushRecords(srv, syncResources.TargetUrl, syncResources.TargetToken, records)
-		}
-	*/
-	return err
+	var failedRecords []FailedRecord
+	if srvConfig.Config.Sync.NWorkers != 0 {
+		nWorkers := srvConfig.Config.Sync.NWorkers
+		failedRecords = pushRecordsConcurrent(srv, syncResources.TargetUrl, syncResources.TargetToken, records, nWorkers)
+	} else {
+		failedRecords = pushRecords(srv, syncResources.TargetUrl, syncResources.TargetToken, records)
+	}
+	return failedRecords
 }
 
 // helper function to get proper FOXDEN url for given service, url and did
@@ -268,7 +276,13 @@ func getDidRecords(srv string, syncResources SyncResources) []map[string]any {
 		rurl := getFoxdenUrl(srv, syncResources.SourceUrl, did)
 		recs, err := getRecords(rurl, syncResources.SourceToken)
 		if err == nil {
-			records = append(records, recs...)
+			for _, r := range recs {
+				val, ok := r["did"]
+				if ok && fmt.Sprintf("%s", val) != "" {
+					records = append(records, r)
+				}
+			}
+			//records = append(records, recs...)
 		} else {
 			log.Println("ERROR: unable to get records for url", rurl, err)
 		}
@@ -387,14 +401,19 @@ func pushRecord(srv, rurl, token string, rec map[string]any) error {
 		return err
 	}
 	if resp.StatusCode != 200 {
-		log.Printf("ERROR: reponse from target FOXDEN %+v", resp.Status)
+		if Verbose > 1 {
+			log.Printf("ERROR: reponse from target FOXDEN %+v", resp.Status)
+		}
 		return errors.New(resp.Status)
 	}
 	return nil
 }
 
 // helper function to push FOXDEN records to upstream target url
-func pushRecords(srv, turl, token string, records []map[string]any) error {
+func pushRecords(srv, turl, token string, records []map[string]any) []FailedRecord {
+	// output error error records
+	var failedRecords []FailedRecord
+
 	// Frontend /record end-point for metadata injectio
 	rurl := fmt.Sprintf("%s/record", turl)
 	if srv == "provenance" {
@@ -407,15 +426,22 @@ func pushRecords(srv, turl, token string, records []map[string]any) error {
 	for _, rec := range records {
 		err := pushRecord(srv, rurl, token, rec)
 		if err != nil {
-			return err
+			var did string
+			if val, ok := rec["did"]; ok {
+				did = fmt.Sprintf("%s", val)
+			}
+			frec := FailedRecord{Did: did, Error: err}
+			failedRecords = append(failedRecords, frec)
 		}
 	}
-	return nil
+	return failedRecords
 }
 
 // pushRecordsConcurrent pushes records concurrently using a worker pool.
 // nWorkers controls concurrency (e.g., 4).
-func pushRecordsConcurrent(srv, turl, token string, records []map[string]any, nWorkers int) error {
+func pushRecordsConcurrent(srv, turl, token string, records []map[string]any, nWorkers int) []FailedRecord {
+	var failedRecords []FailedRecord
+
 	rurl := fmt.Sprintf("%s/record", turl)
 	if srv == "provenance" {
 		rurl = fmt.Sprintf("%s/provenance", turl)
@@ -428,7 +454,6 @@ func pushRecordsConcurrent(srv, turl, token string, records []map[string]any, nW
 
 	// job and error channels
 	jobs := make(chan map[string]any)
-	errs := make(chan error, len(records)) // buffered so goroutines don't block
 
 	var wg sync.WaitGroup
 
@@ -440,7 +465,14 @@ func pushRecordsConcurrent(srv, turl, token string, records []map[string]any, nW
 			for rec := range jobs {
 				if err := pushRecord(srv, rurl, token, rec); err != nil {
 					log.Printf("WARNING: unable to push record to %s, error=%v", rurl, err)
-					errs <- err
+					var did string
+					if val, ok := rec["did"]; ok {
+						did = fmt.Sprintf("%s", val)
+						frec := FailedRecord{Did: did, Error: err}
+						failedRecords = append(failedRecords, frec)
+					} else {
+						log.Printf("WARNING: record %+v does not have did", rec)
+					}
 				}
 			}
 		}()
@@ -456,14 +488,6 @@ func pushRecordsConcurrent(srv, turl, token string, records []map[string]any, nW
 
 	// wait for all workers to finish
 	wg.Wait()
-	close(errs)
 
-	// collect errors
-	var firstErr error
-	for err := range errs {
-		if firstErr == nil {
-			firstErr = err // return only the first error
-		}
-	}
-	return firstErr
+	return failedRecords
 }

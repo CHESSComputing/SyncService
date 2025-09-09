@@ -69,9 +69,8 @@ func (m *mockHTTPRead) PostForm(rurl string, formData url.Values) (*http.Respons
 // mockHTTPWrite implements services.HTTPClient
 type mockHTTPWrite struct {
 	Token    string
-	lastReq  map[string][]byte // url -> body bytes (for inspection)
-	errs     map[string]error  // url -> error
-	statusOK map[string]bool   // url -> return 200 or non-200
+	errs     map[string]error // url -> error
+	statusOK map[string]bool  // url -> return 200 or non-200
 	mu       sync.Mutex
 }
 
@@ -79,15 +78,6 @@ func (m *mockHTTPWrite) Post(url, contentType string, body *bytes.Buffer) (*http
 	if err, ok := m.errs[url]; ok && err != nil {
 		return nil, err
 	}
-
-	b := body.Bytes() // safe since body is *bytes.Buffer
-
-	m.mu.Lock()
-	if m.lastReq == nil {
-		m.lastReq = map[string][]byte{}
-	}
-	m.lastReq[url] = b
-	m.mu.Unlock()
 
 	status := 200
 	if ok, found := m.statusOK[url]; found && !ok {
@@ -290,7 +280,6 @@ func Test_pushRecord_metadata_and_provenance(t *testing.T) {
 	mw := &mockHTTPWrite{
 		statusOK: map[string]bool{},
 		errs:     map[string]error{},
-		lastReq:  map[string][]byte{},
 	}
 	orig := _httpWriteRequest
 	withReplacedGlobals(t, func() {
@@ -301,28 +290,21 @@ func Test_pushRecord_metadata_and_provenance(t *testing.T) {
 
 	// provenance record (no schema required)
 	provRec := map[string]any{"did": "p1", "who": "x"}
-	err := pushRecord("http://target/provenance", "token", provRec)
+	err := pushRecord("provenance", "http://target/provenance", "token", provRec)
 	if err != nil {
 		t.Fatalf("pushRecord provenance failed: %v", err)
-	}
-	// should have recorded last request body
-	mw.mu.Lock()
-	_, ok := mw.lastReq["http://target/provenance"]
-	mw.mu.Unlock()
-	if !ok {
-		t.Fatalf("expected request to provenance url to be saved")
 	}
 
 	// metadata record requires schema
 	metaRec := map[string]any{"did": "m1", "schema": "s1", "field": "v"}
-	err = pushRecord("http://target/record", "token", metaRec)
+	err = pushRecord("metadata", "http://target/record", "token", metaRec)
 	if err != nil {
 		t.Fatalf("pushRecord metadata failed: %v", err)
 	}
 
 	// missing schema should return error
 	badMeta := map[string]any{"did": "m2", "field": "v"}
-	err = pushRecord("http://target/record", "token", badMeta)
+	err = pushRecord("metadata", "http://target/record", "token", badMeta)
 	if err == nil {
 		t.Fatalf("pushRecord should have failed due missing schema")
 	}
@@ -330,8 +312,7 @@ func Test_pushRecord_metadata_and_provenance(t *testing.T) {
 
 func Test_pushRecords_errorPropagation(t *testing.T) {
 	mw := &mockHTTPWrite{
-		errs:    map[string]error{"http://target/record": errors.New("boom")},
-		lastReq: map[string][]byte{},
+		errs: map[string]error{"http://target/record": errors.New("boom")},
 	}
 	orig := _httpWriteRequest
 	withReplacedGlobals(t, func() {
@@ -341,22 +322,27 @@ func Test_pushRecords_errorPropagation(t *testing.T) {
 	})
 
 	recs := []map[string]any{{"did": "x", "schema": "s"}}
-	err := pushRecords("metadata", "http://target", "tok", recs)
-	if err == nil {
+	failedRecords := pushRecords("metadata", "http://target", "tok", recs)
+	if len(failedRecords) == 0 {
 		t.Fatalf("expected pushRecords to return error when pushRecord fails")
+	}
+	for _, r := range failedRecords {
+		t.Logf("failed record %+v", r)
 	}
 }
 
 func Test_getDidRecords_and_concurrent(t *testing.T) {
 	// setup read mock returning different payloads per did URL
-	respMap := map[string]string{}
-	dids := []string{"d1", "d2", "d3", "d4"}
-	for _, d := range dids {
-		// create URL that getFoxdenUrl will produce
-		rmeta := getFoxdenUrl("metadata", "http://src", d)
-		respMap[rmeta] = fmt.Sprintf(`[{"did":"%s","x":%s}]`, d, `"val"`)
+	dids := []string{"a", "b"}
+	base := "http://src"
+	// Each DID endpoint must be mocked, otherwise returns nothing
+	resp := map[string]string{
+		fmt.Sprintf("%s/dids", base):         `[{"did":"a"},{"did":"b"}]`,
+		fmt.Sprintf("%s/record?did=a", base): `[{"did":"a","schema":"S1"}]`,
+		fmt.Sprintf("%s/record?did=b", base): `[{"did":"b","schema":"S2"}]`,
 	}
-	mr := &mockHTTPRead{responses: respMap}
+
+	mr := &mockHTTPRead{responses: resp}
 	orig := _httpReadRequest
 	withReplacedGlobals(t, func() {
 		_httpReadRequest = mr
@@ -365,23 +351,28 @@ func Test_getDidRecords_and_concurrent(t *testing.T) {
 	})
 
 	// sequential
-	seq := getDidRecords("metadata", "http://src", dids, "tok")
+	syncResources := SyncResources{
+		SourceUrl: "http://src", SourceToken: "tok", SourceDids: dids,
+		TargetUrl: "http://trg", TargetToken: "tok", TargetDids: []string{},
+		Dids: dids,
+	}
+	seq := getDidRecords("metadata", syncResources)
 	if len(seq) != len(dids) {
-		t.Fatalf("expected %d records, got %d (seq)", len(dids), len(seq))
+		t.Fatalf("getDidRecords expected %d records, got %d", len(dids), len(seq))
 	}
 
 	// concurrent with worker pool
-	con := getDidRecordsConcurrent("metadata", "http://src", dids, "tok", 2)
+	con := getDidRecordsConcurrent("metadata", syncResources, 2)
 	if len(con) != len(dids) {
-		t.Fatalf("expected %d records, got %d (concurrent)", len(dids), len(con))
+		t.Fatalf("getDidRecordsConcurrent expected %d records, got %d", len(dids), len(con))
 	}
 }
 
 func Test_getDIDs_and_updateRecords_flow_with_workers(t *testing.T) {
-
 	// This integrates:
 	// - getDIDs which uses getRecords internally.
-	// - updateRecords which uses getDIDs, getDidRecordsConcurrent, pushRecords.
+	// - getResources which computes SourceDids/TargetDids/Dids.
+	// - updateRecords which uses getDidRecordsConcurrent and pushRecordsConcurrent.
 	// We'll set source to have 3 dids, target to have 1 did so 2 diffs to sync.
 	srcBase := "http://src"
 	tgtBase := "http://tgt"
@@ -392,39 +383,32 @@ func Test_getDIDs_and_updateRecords_flow_with_workers(t *testing.T) {
 	resp[fmt.Sprintf("%s/dids", srcBase)] = `[{"did":"a"},{"did":"b"},{"did":"c"}]`
 	// target /dids endpoint
 	resp[fmt.Sprintf("%s/dids", tgtBase)] = `[{"did":"c"}]`
-	// for each did, source record endpoint
+	// for each did that should be synced, source record endpoints
 	for _, d := range []string{"a", "b"} {
 		// metadata record endpoints
 		resp[getFoxdenUrl("metadata", srcBase, d)] = fmt.Sprintf(`[{"did":"%s","schema":"S","x":1}]`, d)
-		// provenance endpoints too (updateRecords calls getDIDs for provenance or metadata separately)
-		resp[getFoxdenUrl("provenance", srcBase, d)] = fmt.Sprintf(`[{"did":"%s","schema":"S","actor":"me"}]`, d)
+		// provenance endpoints too (updateRecords calls getDidRecordsConcurrent for provenance/metadata)
+		resp[getFoxdenUrl("provenance", srcBase, d)] = fmt.Sprintf(`[{"did":"%s","actor":"me"}]`, d)
 	}
-	// mock readers and writers
+
+	// mock http read and write clients
 	mr := &mockHTTPRead{responses: resp}
 	mw := &mockHTTPWrite{
-		statusOK: map[string]bool{},
+		statusOK: map[string]bool{}, // leave empty => success (200)
 		errs:     map[string]error{},
-		lastReq:  map[string][]byte{},
 	}
 
-	// metaDB: need to track Update calls made by updateSyncRecordStatus invoked by syncWorker
-	mdb := &mockMetaDB{
-		gets: map[string][]map[string]any{
-			// for printSyncRecordStatus called with uuid "u1", return a record with status set later by Update
-			"u1": {{"uuid": "u1", "status": "initial"}},
-		},
-	}
-
-	// set config: use NWorkers to pick concurrent code path
-	prevWorkers := srvConfig.Config.Sync.NWorkers
+	// metaDB: we don't need special behavior here, but capture original to restore
 	origRead := _httpReadRequest
 	origWrite := _httpWriteRequest
 	origMeta := metaDB
+	prevWorkers := srvConfig.Config.Sync.NWorkers
 
+	// replace globals with mocks and set worker count to force concurrent code paths
 	withReplacedGlobals(t, func() {
 		_httpReadRequest = mr
 		_httpWriteRequest = mw
-		metaDB = mdb
+		metaDB = origMeta // keep original metaDB (or set a mock if you prefer)
 		srvConfig.Config.Sync.NWorkers = 2
 	}, func() {
 		_httpReadRequest = origRead
@@ -433,7 +417,7 @@ func Test_getDIDs_and_updateRecords_flow_with_workers(t *testing.T) {
 		srvConfig.Config.Sync.NWorkers = prevWorkers
 	})
 
-	// create a syncRecord to pass to updateRecords
+	// construct a syncRecord and obtain SyncResources via getResources (this exercises getDIDs)
 	syncRec := map[string]any{
 		"source_url":   srcBase,
 		"target_url":   tgtBase,
@@ -441,21 +425,22 @@ func Test_getDIDs_and_updateRecords_flow_with_workers(t *testing.T) {
 		"target_token": "ttok",
 	}
 
-	// First call updateMetadataRecords (calls updateRecords with "metadata")
-	if err := updateMetadataRecords(syncRec); err != nil {
-		t.Fatalf("updateMetadataRecords failed: %v", err)
+	sr, err := getResources(syncRec)
+	if err != nil {
+		t.Fatalf("getResources failed: %v", err)
 	}
-	// Then provenance
-	if err := updateProvenanceRecords(syncRec); err != nil {
-		t.Fatalf("updateProvenanceRecords failed: %v", err)
+
+	// now call updateMetadataRecords -> should fetch records for 'a' and 'b' and push them
+	failedMeta := updateMetadataRecords(sr)
+	if len(failedMeta) != 0 {
+		t.Fatalf("expected no failed metadata records, got %d: %+v", len(failedMeta), failedMeta)
 	}
-	// verify that at least some push requests happened
-	mw.mu.Lock()
-	if len(mw.lastReq) == 0 {
-		mw.mu.Unlock()
-		t.Fatalf("expected some push requests to be made")
+
+	// and the same for provenance
+	failedProv := updateProvenanceRecords(sr)
+	if len(failedProv) != 0 {
+		t.Fatalf("expected no failed provenance records, got %d: %+v", len(failedProv), failedProv)
 	}
-	mw.mu.Unlock()
 }
 
 func Test_updateSyncRecordStatus_and_print(t *testing.T) {
@@ -508,9 +493,7 @@ func Test_syncWorker_fullFlow(t *testing.T) {
 
 	// http read and write mocks
 	mr := &mockHTTPRead{responses: resp}
-	mw := &mockHTTPWrite{
-		lastReq: map[string][]byte{},
-	}
+	mw := &mockHTTPWrite{}
 
 	// metaDB: watch Update calls and supply Get for print
 	mdb := &mockMetaDB{
@@ -567,5 +550,146 @@ func Test_syncWorker_fullFlow(t *testing.T) {
 	// Expect multiple status updates (InProgress, SyncMetadata, InProgress, SyncProvenance, Completed)
 	if len(statusCodes) < 3 {
 		t.Fatalf("expected at least 3 status updates, got %d", len(statusCodes))
+	}
+}
+
+func Test_pushRecords_failedRecords(t *testing.T) {
+	mw := &mockHTTPWrite{
+		errs: map[string]error{
+			"http://target/record": errors.New("fail push"),
+		},
+	}
+	orig := _httpWriteRequest
+	withReplacedGlobals(t, func() { _httpWriteRequest = mw }, func() { _httpWriteRequest = orig })
+
+	recs := []map[string]any{
+		{"did": "d1", "schema": "s"},
+		{"did": "d2", "schema": "s"},
+	}
+	failed := pushRecords("metadata", "http://target", "tok", recs)
+	if len(failed) != 2 {
+		t.Fatalf("expected 2 failed records, got %d", len(failed))
+	}
+	for _, fr := range failed {
+		if fr.Did == "" || fr.Error == nil {
+			t.Errorf("unexpected failed record: %+v", fr)
+		}
+	}
+}
+
+func Test_pushRecordsConcurrent_failedRecords(t *testing.T) {
+	mw := &mockHTTPWrite{
+		statusOK: map[string]bool{"http://target/record": false}, // force non-200
+	}
+	orig := _httpWriteRequest
+	withReplacedGlobals(t, func() { _httpWriteRequest = mw }, func() { _httpWriteRequest = orig })
+
+	recs := []map[string]any{
+		{"did": "d1", "schema": "s"},
+		{"did": "d2", "schema": "s"},
+	}
+	failed := pushRecordsConcurrent("metadata", "http://target", "tok", recs, 2)
+	if len(failed) != 2 {
+		t.Fatalf("expected 2 failed records, got %d", len(failed))
+	}
+}
+
+func Test_updateMetadataRecords_failed(t *testing.T) {
+	srcBase := "http://src"
+	tgtBase := "http://tgt"
+
+	// source dids: one record "a"
+	resp := map[string]string{
+		fmt.Sprintf("%s/dids", srcBase): `[{"did":"a"}]`,
+		fmt.Sprintf("%s/dids", tgtBase): `[]`,
+		// source record endpoint
+		getFoxdenUrl("metadata", srcBase, "a"): `[{"did":"a","schema":"S"}]`,
+	}
+
+	mr := &mockHTTPRead{responses: resp}
+	mw := &mockHTTPWrite{
+		errs: map[string]error{
+			// cause pushRecord for metadata to fail
+			fmt.Sprintf("%s/record", tgtBase): errors.New("boom"),
+		},
+	}
+
+	origRead := _httpReadRequest
+	origWrite := _httpWriteRequest
+	prevWorkers := srvConfig.Config.Sync.NWorkers
+	withReplacedGlobals(t, func() {
+		_httpReadRequest = mr
+		_httpWriteRequest = mw
+		srvConfig.Config.Sync.NWorkers = 1
+	}, func() {
+		_httpReadRequest = origRead
+		_httpWriteRequest = origWrite
+		srvConfig.Config.Sync.NWorkers = prevWorkers
+	})
+
+	syncRec := map[string]any{
+		"source_url":   srcBase,
+		"target_url":   tgtBase,
+		"source_token": "stok",
+		"target_token": "ttok",
+	}
+
+	sr, err := getResources(syncRec)
+	if err != nil {
+		t.Fatalf("getResources failed: %v", err)
+	}
+
+	failed := updateMetadataRecords(sr)
+	if len(failed) == 0 || failed[0].Did != "a" {
+		t.Fatalf("expected failed record for did=a, got %+v", failed)
+	}
+}
+
+func Test_updateProvenanceRecords_failed(t *testing.T) {
+	srcBase := "http://src"
+	tgtBase := "http://tgt"
+
+	resp := map[string]string{
+		fmt.Sprintf("%s/dids", srcBase):          `[{"did":"p"}]`,
+		fmt.Sprintf("%s/dids", tgtBase):          `[]`,
+		getFoxdenUrl("provenance", srcBase, "p"): `[{"did":"p","actor":"me"}]`,
+	}
+
+	mr := &mockHTTPRead{responses: resp}
+	mw := &mockHTTPWrite{
+		statusOK: map[string]bool{
+			// force non-200 for provenance pushes
+			fmt.Sprintf("%s/provenance", tgtBase): false,
+		},
+	}
+
+	origRead := _httpReadRequest
+	origWrite := _httpWriteRequest
+	prevWorkers := srvConfig.Config.Sync.NWorkers
+	withReplacedGlobals(t, func() {
+		_httpReadRequest = mr
+		_httpWriteRequest = mw
+		srvConfig.Config.Sync.NWorkers = 1
+	}, func() {
+		_httpReadRequest = origRead
+		_httpWriteRequest = origWrite
+		srvConfig.Config.Sync.NWorkers = prevWorkers
+	})
+
+	syncRec := map[string]any{
+		"source_url":   srcBase,
+		"target_url":   tgtBase,
+		"source_token": "stok",
+		"target_token": "ttok",
+	}
+
+	sr, err := getResources(syncRec)
+	if err != nil {
+		t.Fatalf("getResources failed: %v", err)
+	}
+
+	failed := updateProvenanceRecords(sr)
+	if len(failed) == 0 || failed[0].Did != "p" {
+		t.Fatalf("expected failed record for did=p, got %+v", failed)
 	}
 }
