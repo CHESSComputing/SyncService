@@ -95,6 +95,9 @@ func syncWorker(syncRecord map[string]any) error {
 	failedRecords := updateMetadataRecords(syncResources)
 	if len(failedRecords) != 0 {
 		msg := fmt.Sprintf("Failed to sync all metadata records, # of failed records %d", len(failedRecords))
+		if err := updateSyncRecordStatus(suuid, msg, Failed); err != nil {
+			return err
+		}
 		return errors.New(msg)
 	}
 	if err := updateSyncRecordStatus(suuid, "metadata records are synched", SyncMetadata); err != nil {
@@ -108,6 +111,9 @@ func syncWorker(syncRecord map[string]any) error {
 	failedRecords = updateProvenanceRecords(syncResources)
 	if len(failedRecords) != 0 {
 		msg := fmt.Sprintf("Failed to sync all provenance records, # of failed records %d", len(failedRecords))
+		if err := updateSyncRecordStatus(suuid, msg, Failed); err != nil {
+			return err
+		}
 		return errors.New(msg)
 	}
 	if err := updateSyncRecordStatus(suuid, "provenance records are synched", SyncProvenance); err != nil {
@@ -247,6 +253,11 @@ func updateRecords(srv string, syncResources SyncResources) []FailedRecord {
 	if Verbose > 0 {
 		log.Printf("Fetched %d records from source FOXDEN instance %s", len(records), syncResources.SourceUrl)
 	}
+	if srv == "provenance" {
+		for _, r := range records {
+			log.Printf("provenance record %+v", r)
+		}
+	}
 
 	// push records to target FOXDEN instance
 	var failedRecords []FailedRecord
@@ -255,6 +266,11 @@ func updateRecords(srv string, syncResources SyncResources) []FailedRecord {
 		failedRecords = pushRecordsConcurrent(srv, syncResources.TargetUrl, syncResources.TargetToken, records, nWorkers)
 	} else {
 		failedRecords = pushRecords(srv, syncResources.TargetUrl, syncResources.TargetToken, records)
+	}
+	if srv == "provenance" {
+		for _, r := range failedRecords {
+			log.Printf("failed record %+v", r)
+		}
 	}
 	return failedRecords
 }
