@@ -18,6 +18,7 @@ const (
 	SyncMetadata                   // 108 synching metadata
 	SyncProvenance                 // 109 synching provenance records
 	Completed                      // 110 request completed
+	Failed                         // 111 request failed
 )
 
 // RequestData represents SyncService request data payload
