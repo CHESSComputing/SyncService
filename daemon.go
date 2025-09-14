@@ -96,6 +96,7 @@ func syncWorker(syncRecord map[string]any) error {
 	failedRecords := updateMetadataRecords(syncResources)
 	if len(failedRecords) != 0 {
 		msg := fmt.Sprintf("Failed to sync all metadata records, # of failed records %d", len(failedRecords))
+		log.Printf("WARINIG: %s, failedRecords=%+v", msg, failedRecords)
 		if err := updateSyncRecordStatus(suuid, msg, Failed); err != nil {
 			return err
 		}
@@ -112,6 +113,7 @@ func syncWorker(syncRecord map[string]any) error {
 	failedRecords = updateProvenanceRecords(syncResources)
 	if len(failedRecords) != 0 {
 		msg := fmt.Sprintf("Failed to sync all provenance records, # of failed records %d", len(failedRecords))
+		log.Printf("WARINIG: %s, failedRecords=%+v", msg, failedRecords)
 		if err := updateSyncRecordStatus(suuid, msg, Failed); err != nil {
 			return err
 		}
@@ -384,6 +386,7 @@ func pushRecord(srv, rurl, token string, rec map[string]any) error {
 		}
 		// we submit provenance record
 		data, err = json.Marshal(rec)
+		log.Printf("### provenance record=%+v", rec)
 	} else {
 		// we submit MetaRecord
 		mrec := MetaRecord{Record: rec}
@@ -505,10 +508,29 @@ func pushRecordsConcurrent(srv, turl, token string, records []map[string]any, nW
 }
 
 // helper function to check if provenance record is empty
-func provenanceEmpty(rec any) bool {
-	switch r := rec.(type) {
-	case dbs.ProvenanceRecord:
-		return r.IsEmpty()
+func provenanceEmpty(rec map[string]any) bool {
+	if provRecord, err := mapToProvenance(rec); err == nil {
+		return provRecord.IsEmpty()
+	} else {
+		log.Println("ERROR: unable to convert map to provenance record, error", err)
 	}
 	return false
+}
+
+// helper function to map generic map to provenance record
+func mapToProvenance(rec map[string]any) (dbs.ProvenanceRecord, error) {
+	var pr dbs.ProvenanceRecord
+
+	// Marshal the map back into JSON
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return pr, fmt.Errorf("marshal error: %w", err)
+	}
+
+	// Unmarshal JSON into the struct
+	if err := json.Unmarshal(data, &pr); err != nil {
+		return pr, fmt.Errorf("unmarshal error: %w", err)
+	}
+
+	return pr, nil
 }
