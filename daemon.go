@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	dbs "github.com/CHESSComputing/DataBookkeeping/dbs"
 	srvConfig "github.com/CHESSComputing/golib/config"
 	"github.com/CHESSComputing/golib/services"
 	"github.com/CHESSComputing/golib/utils"
@@ -253,11 +254,6 @@ func updateRecords(srv string, syncResources SyncResources) []FailedRecord {
 	if Verbose > 0 {
 		log.Printf("Fetched %d records from source FOXDEN instance %s", len(records), syncResources.SourceUrl)
 	}
-	if srv == "provenance" {
-		for _, r := range records {
-			log.Printf("provenance record %+v", r)
-		}
-	}
 
 	// push records to target FOXDEN instance
 	var failedRecords []FailedRecord
@@ -266,11 +262,6 @@ func updateRecords(srv string, syncResources SyncResources) []FailedRecord {
 		failedRecords = pushRecordsConcurrent(srv, syncResources.TargetUrl, syncResources.TargetToken, records, nWorkers)
 	} else {
 		failedRecords = pushRecords(srv, syncResources.TargetUrl, syncResources.TargetToken, records)
-	}
-	if srv == "provenance" {
-		for _, r := range failedRecords {
-			log.Printf("failed record %+v", r)
-		}
 	}
 	return failedRecords
 }
@@ -386,6 +377,11 @@ func pushRecord(srv, rurl, token string, rec map[string]any) error {
 	var data []byte
 	var err error
 	if srv == "provenance" {
+		// check if provenance record is empty, if it is the case we simply return
+		if provenanceEmpty(rec) {
+			log.Printf("WARNING: provenance record %+v is empty", rec)
+			return nil
+		}
 		// we submit provenance record
 		data, err = json.Marshal(rec)
 	} else {
@@ -506,4 +502,13 @@ func pushRecordsConcurrent(srv, turl, token string, records []map[string]any, nW
 	wg.Wait()
 
 	return failedRecords
+}
+
+// helper function to check if provenance record is empty
+func provenanceEmpty(rec any) bool {
+	switch r := rec.(type) {
+	case dbs.ProvenanceRecord:
+		return r.IsEmpty()
+	}
+	return false
 }
