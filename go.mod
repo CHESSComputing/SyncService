@@ -1,10 +1,10 @@
 module github.com/CHESSComputing/SyncService
 
-go 1.25.3
+go 1.25.5
 
 require (
 	github.com/CHESSComputing/DataBookkeeping v0.2.9
-	github.com/CHESSComputing/golib v0.9.6
+	github.com/CHESSComputing/golib v0.9.7
 	github.com/gin-gonic/gin v1.11.0
 	github.com/google/uuid v1.6.0
 )
