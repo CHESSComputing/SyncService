@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -36,6 +37,11 @@ type FailedRecord struct {
 // syncDaemon function provide async functionality of
 // FOXDEN sync process
 func syncDaemon(sleep int) {
+	// ensure we dump stack of this goroutine when it suddenly dies
+	defer func() {
+		log.Printf("syncDaemon goroutine exited\n%s", debug.Stack())
+	}()
+
 	dbname := srvConfig.Config.Sync.MongoDB.DBName
 	dbcoll := srvConfig.Config.Sync.MongoDB.DBColl
 	idx := 0
@@ -45,15 +51,14 @@ func syncDaemon(sleep int) {
 	time.Sleep(time.Duration(2 * int(time.Second)))
 	for {
 		records := metaDB.Get(dbname, dbcoll, spec, idx, limit)
-		var wg sync.WaitGroup
+		log.Printf("sync daemon loop found %d records to sync", len(records))
 		for _, rec := range records {
-			wg.Add(1)
 			if Verbose > 1 {
 				log.Printf("processing %+v", rec)
 			}
-			syncWorker(rec)
+			err := syncWorker(rec)
+			log.Println("sync job is finished with error:", err)
 		}
-		wg.Wait()
 		// if sleep interval is negative we quite the daemon cycle
 		if sleep < 0 {
 			break
@@ -181,7 +186,7 @@ func updateProvenanceRecords(syncResources SyncResources) []FailedRecord {
 func updateMetadataRecords(syncResources SyncResources) []FailedRecord {
 	failedRecords := updateRecords("metadata", syncResources)
 	for _, r := range failedRecords {
-		log.Printf("ERROR: failed provenance record %+v", r)
+		log.Printf("ERROR: failed metadata record %+v", r)
 	}
 	return failedRecords
 }
