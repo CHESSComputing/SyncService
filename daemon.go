@@ -86,6 +86,10 @@ func syncWorker(syncRecord map[string]any) error {
 	// get sync resources
 	syncResources, err := getResources(syncRecord)
 	if err != nil {
+		msg := fmt.Sprintf("Fail to sync all records, error %s", err)
+		if e := updateSyncRecordStatus(suuid, msg, Failed); e != nil {
+			return e
+		}
 		return err
 	}
 
@@ -359,7 +363,9 @@ func getRecords(rurl, token string) ([]map[string]any, error) {
 		if err = json.Unmarshal(data, &srec); err == nil {
 			return srec.Results.Records, nil
 		}
-		return records, err
+		msg := "unable to fetch records from upstream server"
+		log.Printf("ERROR: %s, error=%v\n", msg, err)
+		return records, errors.New(msg)
 	}
 	return records, nil
 }
