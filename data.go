@@ -21,10 +21,10 @@ const (
 	Failed                         // 111 request failed
 )
 
-// RequestData represents SyncService request data payload
-type RequestData struct {
+// SyncRequest represents SyncService request data payload
+type SyncRequest struct {
 	UUID        string   `json:"uuid"`
-	did         string   `json:"did",omitempty`
+	Did         string   `json:"did,omitempty"`
 	SourceURL   string   `json:"source_url"`
 	SourceToken string   `json:"source_token"`
 	TargetURL   string   `json:"target_url"`
@@ -33,11 +33,12 @@ type RequestData struct {
 	StatusCode  int      `json:"status_code"`
 	CreatedAt   string   `json:"created_at"`
 	UpdatedAt   string   `json:"updated_at"`
-	Btrs        []string `json:"btrs",omitempty`
+	Btrs        []string `json:"btrs,omitempty"`
+	Continuous  bool     `json:"continuous"`
 }
 
 // RequestRecord creates new request record for database out of payload
-func (p *RequestData) RequestRecord() map[string]any {
+func (p *SyncRequest) RequestRecord() map[string]any {
 	rec := make(map[string]any)
 	rec["source_url"] = p.SourceURL
 	rec["target_url"] = p.TargetURL
@@ -52,5 +53,6 @@ func (p *RequestData) RequestRecord() map[string]any {
 	rec["status"] = "sync request is accepted"
 	rec["status_code"] = Accepted
 	rec["created_at"] = time.Now().Format(time.RFC3339)
+	rec["continuous"] = p.Continuous
 	return rec
 }
