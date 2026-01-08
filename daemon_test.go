@@ -290,21 +290,27 @@ func Test_pushRecord_metadata_and_provenance(t *testing.T) {
 
 	// provenance record (no schema required)
 	provRec := map[string]any{"did": "p1", "who": "x"}
-	err := pushRecord("provenance", "http://target/provenance", "token", provRec)
+	syncRecord := SyncResources{
+		SourceToken: "token",
+		SourceUrl:   "http://source",
+		TargetToken: "token",
+		TargetUrl:   "http://target",
+	}
+	err := pushRecord(syncRecord, "provenance", "http://target/provenance", provRec)
 	if err != nil {
 		t.Fatalf("pushRecord provenance failed: %v", err)
 	}
 
 	// metadata record requires schema
 	metaRec := map[string]any{"did": "m1", "schema": "s1", "field": "v"}
-	err = pushRecord("metadata", "http://target/record", "token", metaRec)
+	err = pushRecord(syncRecord, "metadata", "http://target/record", metaRec)
 	if err != nil {
 		t.Fatalf("pushRecord metadata failed: %v", err)
 	}
 
 	// missing schema should return error
 	badMeta := map[string]any{"did": "m2", "field": "v"}
-	err = pushRecord("metadata", "http://target/record", "token", badMeta)
+	err = pushRecord(syncRecord, "metadata", "http://target/record", badMeta)
 	if err == nil {
 		t.Fatalf("pushRecord should have failed due missing schema")
 	}
@@ -322,7 +328,13 @@ func Test_pushRecords_errorPropagation(t *testing.T) {
 	})
 
 	recs := []map[string]any{{"did": "x", "schema": "s"}}
-	failedRecords := pushRecords("metadata", "http://target", "tok", recs)
+	syncRecord := SyncResources{
+		SourceToken: "tok",
+		SourceUrl:   "http://source",
+		TargetToken: "tok",
+		TargetUrl:   "http://target",
+	}
+	failedRecords := pushRecords("metadata", syncRecord, recs)
 	if len(failedRecords) == 0 {
 		t.Fatalf("expected pushRecords to return error when pushRecord fails")
 	}
@@ -418,11 +430,11 @@ func Test_getDIDs_and_updateRecords_flow_with_workers(t *testing.T) {
 	})
 
 	// construct a syncRecord and obtain SyncResources via getResources (this exercises getDIDs)
-	syncRec := map[string]any{
-		"source_url":   srcBase,
-		"target_url":   tgtBase,
-		"source_token": "stok",
-		"target_token": "ttok",
+	syncRec := SyncRequest{
+		SourceURL:   srcBase,
+		TargetURL:   tgtBase,
+		SourceToken: "stok",
+		TargetToken: "ttok",
 	}
 
 	sr, err := getResources(syncRec)
@@ -534,12 +546,12 @@ func Test_syncWorker_fullFlow(t *testing.T) {
 	})
 
 	// build syncRecord used by syncWorker
-	syncRec := map[string]any{
-		"uuid":         "suuid",
-		"source_url":   srcBase,
-		"target_url":   tgtBase,
-		"source_token": "stok",
-		"target_token": "ttok",
+	syncRec := SyncRequest{
+		UUID:        "suuid",
+		SourceURL:   srcBase,
+		TargetURL:   tgtBase,
+		SourceToken: "stok",
+		TargetToken: "ttok",
 	}
 
 	// run syncWorker
@@ -566,7 +578,13 @@ func Test_pushRecords_failedRecords(t *testing.T) {
 		{"did": "d1", "schema": "s"},
 		{"did": "d2", "schema": "s"},
 	}
-	failed := pushRecords("metadata", "http://target", "tok", recs)
+	syncRecord := SyncResources{
+		SourceToken: "tok",
+		SourceUrl:   "http://source",
+		TargetToken: "tok",
+		TargetUrl:   "http://target",
+	}
+	failed := pushRecords("metadata", syncRecord, recs)
 	if len(failed) != 2 {
 		t.Fatalf("expected 2 failed records, got %d", len(failed))
 	}
@@ -588,7 +606,13 @@ func Test_pushRecordsConcurrent_failedRecords(t *testing.T) {
 		{"did": "d1", "schema": "s"},
 		{"did": "d2", "schema": "s"},
 	}
-	failed := pushRecordsConcurrent("metadata", "http://target", "tok", recs, 2)
+	syncRecord := SyncResources{
+		SourceToken: "tok",
+		SourceUrl:   "http://source",
+		TargetToken: "tok",
+		TargetUrl:   "http://target",
+	}
+	failed := pushRecordsConcurrent("metadata", syncRecord, recs, 2)
 	if len(failed) != 2 {
 		t.Fatalf("expected 2 failed records, got %d", len(failed))
 	}
@@ -627,11 +651,11 @@ func Test_updateMetadataRecords_failed(t *testing.T) {
 		srvConfig.Config.Sync.NWorkers = prevWorkers
 	})
 
-	syncRec := map[string]any{
-		"source_url":   srcBase,
-		"target_url":   tgtBase,
-		"source_token": "stok",
-		"target_token": "ttok",
+	syncRec := SyncRequest{
+		SourceToken: "stok",
+		SourceURL:   srcBase,
+		TargetToken: "ttok",
+		TargetURL:   tgtBase,
 	}
 
 	sr, err := getResources(syncRec)
@@ -676,11 +700,11 @@ func Test_updateProvenanceRecords_failed(t *testing.T) {
 		srvConfig.Config.Sync.NWorkers = prevWorkers
 	})
 
-	syncRec := map[string]any{
-		"source_url":   srcBase,
-		"target_url":   tgtBase,
-		"source_token": "stok",
-		"target_token": "ttok",
+	syncRec := SyncRequest{
+		SourceToken: "stok",
+		SourceURL:   srcBase,
+		TargetToken: "ttok",
+		TargetURL:   tgtBase,
 	}
 
 	sr, err := getResources(syncRec)
