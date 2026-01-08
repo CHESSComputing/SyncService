@@ -47,7 +47,7 @@ func putHandler(c *gin.Context) {
 
 // syncHandler handles POST/PUT HTTP requests
 func syncHandler(c *gin.Context, method string) {
-	var payload RequestData
+	var payload SyncRequest
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		resp := services.Response("SyncService", http.StatusBadRequest, IncompleteRequest, err)
 		c.JSON(http.StatusBadRequest, resp)
