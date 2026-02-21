@@ -4,7 +4,7 @@ go 1.25.7
 
 require (
 	github.com/CHESSComputing/DataBookkeeping v0.3.3
-	github.com/CHESSComputing/golib v1.0.9
+	github.com/CHESSComputing/golib v1.1.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/google/uuid v1.6.0
 )
