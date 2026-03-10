@@ -110,48 +110,48 @@ func syncWorker(syncRecord SyncRequest) error {
 	if err != nil {
 		msg := fmt.Sprintf("Fail to sync all records, error %s", err)
 		if e := updateSyncRecordStatus(suuid, msg, Failed); e != nil {
-			return e
+			return fmt.Errorf("[SyncService.main.syncWorker] updateSyncRecordStatus error: %w", e)
 		}
 		return err
 	}
 
 	// update metadata records
 	if err := updateSyncRecordStatus(suuid, "in progress", InProgress); err != nil {
-		return err
+		return fmt.Errorf("[SyncService.main.syncWorker] updateSyncRecordStatus error: %w", err)
 	}
 	failedRecords := updateMetadataRecords(syncResources)
 	if len(failedRecords) != 0 {
 		msg := fmt.Sprintf("Failed to sync all metadata records, # of failed records %d", len(failedRecords))
 		log.Printf("WARINIG: %s, failedRecords=%+v", msg, failedRecords)
 		if err := updateSyncRecordStatus(suuid, msg, Failed); err != nil {
-			return err
+			return fmt.Errorf("[SyncService.main.syncWorker] updateSyncRecordStatus error: %w", err)
 		}
 		return errors.New(msg)
 	}
 	if err := updateSyncRecordStatus(suuid, "metadata records are synched", SyncMetadata); err != nil {
-		return err
+		return fmt.Errorf("[SyncService.main.syncWorker] updateSyncRecordStatus error: %w", err)
 	}
 
 	// update provenance records
 	if err := updateSyncRecordStatus(suuid, "in progress", InProgress); err != nil {
-		return err
+		return fmt.Errorf("[SyncService.main.syncWorker] updateSyncRecordStatus error: %w", err)
 	}
 	failedRecords = updateProvenanceRecords(syncResources)
 	if len(failedRecords) != 0 {
 		msg := fmt.Sprintf("Failed to sync all provenance records, # of failed records %d", len(failedRecords))
 		log.Printf("WARINIG: %s, failedRecords=%+v", msg, failedRecords)
 		if err := updateSyncRecordStatus(suuid, msg, Failed); err != nil {
-			return err
+			return fmt.Errorf("[SyncService.main.syncWorker] updateSyncRecordStatus error: %w", err)
 		}
 		return errors.New(msg)
 	}
 	if err := updateSyncRecordStatus(suuid, "provenance records are synched", SyncProvenance); err != nil {
-		return err
+		return fmt.Errorf("[SyncService.main.syncWorker] updateSyncRecordStatus error: %w", err)
 	}
 
 	// final update
 	if err := updateSyncRecordStatus(suuid, "sync is completed", Completed); err != nil {
-		return err
+		return fmt.Errorf("[SyncService.main.syncWorker] updateSyncRecordStatus error: %w", err)
 	}
 	return nil
 }
@@ -170,7 +170,7 @@ func updateSyncRecordStatus(suuid, status string, statusCode int) error {
 	rec["updated_at"] = time.Now().Format(time.RFC3339)
 	newRecord["$set"] = rec
 	if err := metaDB.Update(dbname, dbcoll, spec, newRecord); err != nil {
-		return err
+		return fmt.Errorf("[SyncService.main.updateSyncRecordStatus] metaDB.Update error: %w", err)
 	}
 	printSyncRecordStatus(suuid)
 	return nil
@@ -234,11 +234,11 @@ func getResources(syncRecord SyncRequest) (SyncResources, error) {
 	// obtain all FOXDEN records from source FOXDEN instance
 	sourceDIDs, err := getDIDs(sourceUrl, sourceToken)
 	if err != nil {
-		return SyncResources{}, err
+		return SyncResources{}, fmt.Errorf("[SyncService.main.getResources] getDIDs error: %w", err)
 	}
 	targetDIDs, err := getDIDs(targetUrl, targetToken)
 	if err != nil {
-		return SyncResources{}, err
+		return SyncResources{}, fmt.Errorf("[SyncService.main.getResources] getDIDs error: %w", err)
 	}
 	// construct unique list of dids to fetch from source FOXDEN instance
 	var dids []string
@@ -363,12 +363,12 @@ func getRecords(rurl, token string) ([]map[string]any, error) {
 	_httpReadRequest.SetToken(token)
 	resp, err := _httpReadRequest.Get(rurl)
 	if err != nil {
-		return records, err
+		return records, fmt.Errorf("[SyncService.main.getRecords] _httpReadRequest.Get error: %w", err)
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return records, err
+		return records, fmt.Errorf("[SyncService.main.getRecords] io.ReadAll error: %w", err)
 	}
 	err = json.Unmarshal(data, &records)
 	if err != nil {
@@ -435,7 +435,7 @@ func pushRecord(syncResources SyncResources, srv, rurl string, rec map[string]an
 		log.Printf("push record %+v to %s\n", rec, rurl)
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("[SyncService.main.pushRecord] json.Marshal error: %w", err)
 	}
 	_httpWriteRequest.SetToken(token)
 	resp, err := _httpWriteRequest.Post(rurl, "application/json", bytes.NewBuffer(data))
@@ -446,7 +446,7 @@ func pushRecord(syncResources SyncResources, srv, rurl string, rec map[string]an
 	defer resp.Body.Close()
 	data, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("[SyncService.main.pushRecord] io.ReadAll error: %w", err)
 	}
 	if resp.StatusCode != 200 {
 		if Verbose > 1 {
