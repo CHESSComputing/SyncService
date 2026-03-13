@@ -76,7 +76,7 @@ type mockHTTPWrite struct {
 
 func (m *mockHTTPWrite) Post(url, contentType string, body *bytes.Buffer) (*http.Response, error) {
 	if err, ok := m.errs[url]; ok && err != nil {
-		return nil, err
+		return nil, fmt.Errorf("[SyncService.main.mockHTTPWrite] m.errs error: %w", err)
 	}
 
 	status := 200

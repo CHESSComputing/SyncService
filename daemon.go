@@ -112,7 +112,7 @@ func syncWorker(syncRecord SyncRequest) error {
 		if e := updateSyncRecordStatus(suuid, msg, Failed); e != nil {
 			return fmt.Errorf("[SyncService.main.syncWorker] updateSyncRecordStatus error: %w", e)
 		}
-		return err
+		return fmt.Errorf("[SyncService.main.syncWorker] getResources error: %w", err)
 	}
 
 	// update metadata records
@@ -215,7 +215,7 @@ func getDIDs(rurl, token string) ([]string, error) {
 	didRecords, err := getRecords(rurl, token)
 	if err != nil {
 		log.Printf("ERROR: unable to get records from url=%s token=%s error=%v", rurl, token, err)
-		return dids, err
+		return dids, fmt.Errorf("[SyncService.main.getDIDs] getRecords error: %w", err)
 	}
 	for _, rec := range didRecords {
 		did := fmt.Sprintf("%s", rec["did"])
@@ -441,7 +441,7 @@ func pushRecord(syncResources SyncResources, srv, rurl string, rec map[string]an
 	resp, err := _httpWriteRequest.Post(rurl, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		log.Printf("ERROR: unable to push record to target FOXDEN URL %s, error %v", rurl, err)
-		return err
+		return fmt.Errorf("[SyncService.main.pushRecord] _httpWriteRequest.Post error: %w", err)
 	}
 	defer resp.Body.Close()
 	data, err = io.ReadAll(resp.Body)
