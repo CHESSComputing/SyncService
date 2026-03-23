@@ -2,10 +2,10 @@ cloud.google.com/go/compute/metadata v0.9.0 h1:pDUj4QMoPejqq20dK0Pg2N4yG9zIkYGdB
 cloud.google.com/go/compute/metadata v0.9.0/go.mod h1:E0bWwX5wTnLPedCKqk3pJmVgCBSM6qQI1yTBdEb3C10=
 github.com/Azure/go-ntlmssp v0.1.0 h1:DjFo6YtWzNqNvQdrwEyr/e4nhU3vRiwenz5QX7sFz+A=
 github.com/Azure/go-ntlmssp v0.1.0/go.mod h1:NYqdhxd/8aAct/s4qSYZEerdPuH1liG2/X9DiVTbhpk=
-github.com/CHESSComputing/DataBookkeeping v0.3.5 h1:fpdmPwsLgZVP6tm9KL8wKsdGSWimEuiC9Kgbp2SfnM8=
-github.com/CHESSComputing/DataBookkeeping v0.3.5/go.mod h1:EBQgyAEpPg9yGz6POTNsOSdlddT9bIwKENgnPCd1c2M=
-github.com/CHESSComputing/golib v1.1.9 h1:Ckaah692zfpqW3rVHVPTNdx9CrCYkT6u4rYLHb79S6Q=
-github.com/CHESSComputing/golib v1.1.9/go.mod h1:mLEebNACKawWMbmgTC5iVy6GSpbJJZLQqsua01kVvNA=
+github.com/CHESSComputing/DataBookkeeping v0.3.7 h1:tEXUxCU9OYdsMTEdyb45OiYckGRnrxNfrBYVWZC4LeI=
+github.com/CHESSComputing/DataBookkeeping v0.3.7/go.mod h1:XnKNqRYFbOHvMAtWf0WEzJNAzn8zKWVNiM3s8R3aFyg=
+github.com/CHESSComputing/golib v1.2.0 h1:cKB/7kmZTXR9uELU5ztlk8EZcnRf5NV5HKDftJ3OatQ=
+github.com/CHESSComputing/golib v1.2.0/go.mod h1:mLEebNACKawWMbmgTC5iVy6GSpbJJZLQqsua01kVvNA=
 github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e h1:4dAU9FXIyQktpoUAgOJK3OTFc/xug0PCXYCqU0FgDKI=
 github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e/go.mod h1:cEWa1LVoE5KvSD9ONXsZrj0z6KqySlCCNKHlLzbqAt4=
 github.com/bytedance/gopkg v0.1.4 h1:oZnQwnX82KAIWb7033bEwtxvTqXcYMxDBaQxo5JJHWM=
