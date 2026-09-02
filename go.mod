@@ -1,10 +1,10 @@
 module github.com/CHESSComputing/SyncService
 
-go 1.26.4
+go 1.27.1
 
 require (
-	github.com/CHESSComputing/DataBookkeeping v0.3.8
-	github.com/CHESSComputing/golib v1.3.4
+	github.com/CHESSComputing/DataBookkeeping v0.3.9
+	github.com/CHESSComputing/golib v1.3.5
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 )
@@ -33,7 +33,7 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.30.2 // indirect
+	github.com/go-playground/validator/v10 v10.30.3 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
