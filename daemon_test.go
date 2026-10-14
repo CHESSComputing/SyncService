@@ -127,7 +127,7 @@ type mockMetaDB struct {
 	UpdateHook func(db, coll string, spec map[string]any, newRecord map[string]any) error
 }
 
-func (m *mockMetaDB) Count(_, _ string, query map[string]interface{}) int {
+func (m *mockMetaDB) Count(_, _ string, query map[string]any) int {
 	// return whatever fits your test
 	return 0
 }

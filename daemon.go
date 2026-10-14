@@ -506,10 +506,8 @@ func pushRecordsConcurrent(srv string, syncResources SyncResources, records []ma
 	var wg sync.WaitGroup
 
 	// start worker pool
-	for i := 0; i < nWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range nWorkers {
+		wg.Go(func() {
 			for rec := range jobs {
 				if err := pushRecord(syncResources, srv, rurl, rec); err != nil {
 					log.Printf("WARNING: unable to push record to %s, error=%v", rurl, err)
@@ -523,7 +521,7 @@ func pushRecordsConcurrent(srv string, syncResources SyncResources, records []ma
 					}
 				}
 			}
-		}()
+		})
 	}
 
 	// send jobs
